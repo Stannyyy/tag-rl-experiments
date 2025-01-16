@@ -1,0 +1,29 @@
+Chapter 1
+
+Once upon a time, there were ten different players. They all went through the same training regime before they met each
+other in competition. But their personalities differed. Some liked exploring, some liked to stick with what they know.
+Some learned fast, some slow. Some had a large brain, some a small. Of some players, thoughts were very deep and
+complex, others liked to keep it simple. Some liked looking ahead, some only minded the short term.
+
+Time to introduce our players:
+Pietje Puk: Very average guy, with average brain, average learning speed, average exploration, average depth of thought.
+            He is the base player, and others like to compare themselves to him. (0.001, 0.98, 0.0001, [50,50])
+Liesje Lot: She is a bit more adventurous than Pietje, and likes to explore a bit more. (0.0001, 0.98, 0.0001, [50,50])
+Naima Nima: She is a bit more conservative, and likes to go with what she knows. (0.01, 0.98, 0.0001, [50,50])
+Samir Smit: He likes to keep things simple and get to the core of it. (0.001, 0.98, 0.0001, [25])
+Biesje Bos: She thinks about things quite differently, she sees value in depth. (0.001, 0.98, 0.0001, [50,50,50])
+Fatima Flo: Everybody knows her as a quick learner, making steps quickly. (0.001, 0.98, 0.001, [50,50])
+Omari Oost: They likes to take their time to learn, but once they knows, they knows. (0.00001, 0.98, 0.0001, [50,50])
+Lida Leeuw: She likes to look ahead, and see what the future brings. (0.001, 0.995, 0.0001, [50,50])
+Kim Klasen: She likes to live in the moment, and doesn't care about the future. (0.001, 0.95, 0.0001, [50,50])
+Diego Delo: He is famous for his very large brain. Does this make him smarter? (0.001, 0.98, 0.0001, [100,100,100])
+Randy Rado: He is a bot without a brain, just playing random moves.
+
+Time to introduce our training plan:
+* 100.000 games against a random player, with random moves only: learning only afterwards
+* 100.000 games against a random player, with learning, shifting epsilon
+* 100.000 games against itself, with learning, shifting epsilon
+
+Let's introduce our competition plan:
+* 100.000 games against each other without learning (eps=0)
+* 100.000 games against each other after learning (eps=0)
