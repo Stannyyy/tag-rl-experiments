@@ -2,6 +2,11 @@
 from moderator import Moderator
 from player import Player, RandomPlayer
 from arena import Arena
+import os
+
+# Initialize results paths
+os.mkdir(os.getcwd() + '/checkpoints')
+os.mkdir(os.getcwd() + '/results')
 
 # Initialize players
 p00 = RandomPlayer(name='Randy Rado')

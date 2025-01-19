@@ -3,6 +3,7 @@ import time
 import plotly.graph_objects as go
 import numpy as np
 from config import Config
+import os
 
 # Arena
 class Arena(Config):
@@ -19,6 +20,13 @@ class Arena(Config):
         self.update_epsilon_after = update_epsilon_after
         self.nr_learning_episodes = nr_learning_episodes
         self.training_phase = training_phase
+
+
+        # Initialize paths
+        os.mkdir(os.getcwd() + f'/checkpoints/{training_phase}')
+        for player in self.modertr.players:
+            name = player.name
+            os.mkdir(os.getcwd() + f'/checkpoints/{training_phase}/{name}')
 
     def play_and_learn(self):
         
