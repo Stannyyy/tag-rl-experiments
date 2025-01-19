@@ -43,7 +43,7 @@ class Model(Config):
         self._model = self.define_model()
 
     def define_model(self):
-        with tf.device('/GPU:0'):
+        with tf.device('/GPU:1'):
             layers = []
             for layer_nr in range(len(self._layers)):
                 if layer_nr == 0:
