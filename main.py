@@ -16,9 +16,9 @@ p08 = Player(name='Lida Leeuw', discountFactor=0.995)
 p09 = Player(name='Kim Klasen', discountFactor=0.95)
 p10 = Player(name='Diego Delo', layers=[250,250])
 
-### TRAINING ###
-# Training part 1: everyone plays 100.000 random games against Randy Rado, learning 1.000x every 10.000 games, but not updating epsilon
+### TRAINING PROGRAM ###
+# Training phase 1: everyone plays 100.000 random games against Randy Rado, learning 1.000x every 10.000 games, but not updating epsilon
 for p in [p01, p02, p03, p04, p05, p06, p07, p08, p09, p10]:
     mdrtr = Moderator([p, p00])
-    arn   = Arena(mdrtr, update_epsilon_after=100000, nr_learning_episodes=1000, training_phase="part1")
+    arn   = Arena(mdrtr, update_epsilon_after=1000, nr_learning_episodes=100, training_phase="part1")
     arn.play_and_learn()

@@ -6,7 +6,7 @@ class Config:
                  gridSize = 10,
                  numPlayers = 2, numTaggers = 1,
                  renderSpeed = 0.3, createVideo = True,
-                 numEpisodes = 100001, numEpisodesBeforePrint = 10000, minLoss = 1, numGamesShown = 100,
+                 numEpisodes = 10001, numEpisodesBeforePrint = 10000, minLoss = 1, numGamesShown = 100,
                  chanceOfMutation = 0.01
                 ):
         

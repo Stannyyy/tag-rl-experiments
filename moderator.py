@@ -143,8 +143,9 @@ class Moderator(Config):
             self._players[p]._tot_reward = 0
 
             # Duplicate last 10 samples
-            for dup in range(1, min(11, self._turn_count)):
-                self._players[p]._samples += self._players[p]._samples[(dup*-1):]
+            if isNotRandom:
+                for dup in range(1, min(11, self._turn_count)):
+                    self._players[p]._samples += self._players[p]._samples[(dup*-1):]
 
         # Now other team is the taggers
         self._game._taggers = [t == False for t in self._game._taggers]
