@@ -5,8 +5,10 @@ from arena import Arena
 import os
 
 # Initialize results paths
-os.mkdir(os.getcwd() + '/checkpoints')
-os.mkdir(os.getcwd() + '/results')
+if not os.path.exists(os.getcwd() + '/checkpoints'):
+    os.mkdir(os.getcwd() + '/checkpoints')
+if not os.path.exists(os.getcwd() + '/results'):
+    os.mkdir(os.getcwd() + '/results')
 
 # Initialize players
 p00 = RandomPlayer(name='Randy Rado')
