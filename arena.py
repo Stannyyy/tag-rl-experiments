@@ -76,9 +76,6 @@ class Arena(Config):
                                           mode='valid')
                         fig2.add_trace(go.Line(y=rs, mode='lines', name=self.modertr.players[p].name))
                     else:
-                        # Set samples to 0
-                        self.modertr.players[p].samples = []
-
                         # Print progress
                         av_loss = np.array(self.modertr.players[p].losses[-100:]).mean().round(5)
                         av_rwd = np.array(self.modertr.players[p].reward_store[-100:]).mean().round(5)
@@ -92,6 +89,9 @@ class Arena(Config):
                                           np.ones(width) / width,
                                           mode='valid')
                         fig2.add_trace(go.Line(y=rs, mode='lines', name=self.modertr.players[p].name))
+
+                        print(
+                            f"After player {p} has sample length {len(self.modertr.players[p]._samples)} and all samples length {len(self.modertr.players[p]._samplesAll)}")
 
                 # Show plots
                 print("\n")

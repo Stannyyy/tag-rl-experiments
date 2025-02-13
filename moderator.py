@@ -122,6 +122,7 @@ class Moderator(Config):
                 if isNotRandom:
                     self._players[p]._sample[2] = self._players[p]._reward
 
+
             # Change the reward of the other player to be the negative of  the reward of the current player
             elif (p != self._turn):
                 self._players[p]._tot_reward = self._players[p]._tot_reward - self._players[p]._reward
@@ -141,14 +142,6 @@ class Moderator(Config):
             # Reset player
             self._players[p]._reward_store.append(float(self._players[p]._tot_reward))
             self._players[p]._tot_reward = 0
-
-            # Duplicate last 10 samples
-            if isNotRandom:
-                for dup in range(1, min(11, self._turn_count)):
-                    self._players[p]._samples += self._players[p]._samples[(dup*-1):]
-
-        # Now other team is the taggers
-        self._game._taggers = [t == False for t in self._game._taggers]
 
     def write_video_text(self):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \

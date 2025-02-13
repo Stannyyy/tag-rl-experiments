@@ -15,7 +15,7 @@ from model import Model
 # Player
 class Player(Model):
 
-    def __init__(self, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.98,
+    def __init__(self, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
         learningRate = 0.0001, layers = [50,50], render=False, just_like = None):
 
         # Import model
@@ -33,6 +33,7 @@ class Player(Model):
         # Experience variables (carrying over using just_like)
         self._steps = 0 if just_like is None else just_like._steps
         self._samples = [] if just_like is None else just_like._samples.copy()
+        self._samplesAll = []
 
         # Render variables
         self._render = render
@@ -92,6 +93,7 @@ class Player(Model):
     
     def add_sample(self):
         if len(self._sample) == 5 and len(self._sample[0]) == 6:
+            self._samplesAll += [self._sample]
             self._samples += [self._sample]
             self._sample = []
         if len(self._samples) > self.maxMemory:

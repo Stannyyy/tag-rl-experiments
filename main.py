@@ -27,5 +27,5 @@ p10 = Player(name='Diego Delo', layers=[250,250])
 # Training phase 1: everyone plays 100.000 random games against Randy Rado, learning 1.000x every 10.000 games, but not updating epsilon
 for p in [p01, p02, p03, p04, p05, p06, p07, p08, p09, p10]:
     mdrtr = Moderator([p, p00])
-    arn   = Arena(mdrtr, update_epsilon_after=1000, nr_learning_episodes=100, training_phase="part1")
+    arn   = Arena(mdrtr, update_epsilon_after=100, nr_learning_episodes=25, training_phase="part1")
     arn.play_and_learn()
