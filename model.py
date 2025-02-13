@@ -7,9 +7,11 @@ Created on Thu Oct 21 20:13:26 2021
 import os
 
 # Import packages
+import tensorflow as tfbare
 import tensorflow.keras as tf
 import numpy as np
 from config import Config
+import datetime
 
 # Model game
 class Model(Config):
@@ -42,8 +44,14 @@ class Model(Config):
         # Set up the models
         self._model = self.define_model()
 
+        # Set up the tensorboard
+        log_dir = "logs/dql_" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        self._summary_writer = tfbare.summary.create_file_writer(log_dir)
+        self._summary_loss_step = 0
+        self._summary_reward_step = 0
+
     def define_model(self):
-        with tf.device('/gpu:0'):
+        with tfbare.device('/gpu:0'):
             layers = []
             for layer_nr in range(len(self._layers)):
                 if layer_nr == 0:
@@ -72,6 +80,15 @@ class Model(Config):
 
         # Add losses to log
         self._losses += log.history.get('loss')
+
+        # Add losses to tensorboard
+        with self._summary_writer.as_default():
+            tfbare.summary.scalar('Losses', log.history.get('loss')[0], step = self._summary_loss_step)
+            for i, layer in enumerate(self._model.layers):
+                weights, biases = layer.get_weights()
+                tfbare.summary.histogram(f'Layer_{i}_weights', weights, step = self._summary_loss_step)
+                tfbare.summary.histogram(f'Layer_{i}_biases', biases, step = self._summary_loss_step)
+            self._summary_loss_step += 1
 
     def mutate(self, model):
 

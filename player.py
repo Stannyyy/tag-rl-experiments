@@ -10,7 +10,7 @@ import random
 import numpy as np
 import math
 from model import Model
-
+import tensorflow as tfbare
 
 # Player
 class Player(Model):
@@ -33,7 +33,7 @@ class Player(Model):
         # Experience variables (carrying over using just_like)
         self._steps = 0 if just_like is None else just_like._steps
         self._samples = [] if just_like is None else just_like._samples.copy()
-        self._samplesAll = []
+        self._samplesAll = 0
 
         # Render variables
         self._render = render
@@ -93,13 +93,13 @@ class Player(Model):
     
     def add_sample(self):
         if len(self._sample) == 5 and len(self._sample[0]) == 6:
-            self._samplesAll += [self._sample]
+            self._samplesAll += 1
             self._samples += [self._sample]
             self._sample = []
         if len(self._samples) > self.maxMemory:
             self._samples = self._samples[-self.maxMemory:]
 
-    def learn_by_replay(self, do_update_epsilon = True):
+    def learn_by_replay(self):
 
         # Make random batch
         batch = random.sample(self._samples, k=self.batchSize)
@@ -137,12 +137,15 @@ class Player(Model):
             y[i] = corrected_q
 
         self.train_batch(x, y)
-        if do_update_epsilon:
-            self.update_epsilon()
+        self.update_epsilon()
         
     def update_epsilon(self):
         self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(-self._bootstrapValueEpsilon * self._steps)
         self._steps += 1
+
+        # Add losses to tensorboard
+        with self._summary_writer.as_default():
+            tfbare.summary.scalar('Epsilon', self._eps, step = self._steps)
 
     def new_game(self):
         self._tot_reward = 0
@@ -187,6 +190,6 @@ class RandomPlayer():
     def add_sample(self):
         pass
 
-    def learn_by_replay(self, do_update_epsilon):
+    def learn_by_replay(self):
         pass
 

@@ -1,7 +1,8 @@
-opencv-python==4.8.1.78
-tensorflow==2.16.1
-plotly==5.20.0
-pandas==2.2.1
-pillow==10.2.0
-matplotlib==3.8.3
-scipy==1.12.0
+opencv-python
+tensorflow<=2.10
+plotly
+pandas
+pillow
+matplotlib
+scipy
+numpy==1.23.1
