@@ -1,6 +1,5 @@
 # Import packages
 import time
-import plotly.graph_objects as go
 import numpy as np
 from config import Config
 import os
@@ -76,12 +75,10 @@ class Arena(Config):
 
     def progress_bar(self, task, based_on='episodes', i=100):
         if based_on == 'episodes':
-            total = self.numEpisodesBeforePrint
+            total = self.numEpisodesBeforePrint-1
             percent = round(100 * (self.cnt % total / float(total)))
         elif based_on == 'i':
-            total = self.numEpisodesBeforePrint/10
+            total = self.numEpisodesBeforePrint/10-1
             percent = round(100 * (i % total / float(total)))
         bar = '█' * int(percent) + '-' * (100 - int(percent))
         print(f"\r|{bar}| {percent}%   {task}  ", end="")
-
-
