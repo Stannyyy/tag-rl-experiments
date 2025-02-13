@@ -140,7 +140,7 @@ class Player(Model):
                     tfbare.summary.scalar('Q', prediction_next_state, step=self._learningSteps)
                     tfbare.summary.scalar('correctedQ', corrected_q[action], step=self._learningSteps)
                     tfbare.summary.scalar('diff Q-correctedQ', prediction_next_state-corrected_q[action], step=self._learningSteps)
-                    tfbare.summary.scalar('diff Q-correctedReward', prediction_next_state/reward, step=self._learningSteps)
+                    tfbare.summary.scalar('diff QReward', prediction_next_state/reward, step=self._learningSteps)
                     self._learningSteps += 1
 
             x[i] = state
