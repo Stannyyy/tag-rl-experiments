@@ -10,6 +10,7 @@ import random
 from config import Config
 from game import Game
 import datetime
+import tensorflow as tfbare
 
 # Moderate game
 class Moderator(Config):
@@ -131,23 +132,32 @@ class Moderator(Config):
                     if len(self._players[p]._sample) >= 3:
                         self._players[p]._sample[2] = self._players[p]._reward
 
-            # Append next state and its options to sample (idx 3 and 4 of sample)
+            # Add rewards to reward store 
+            self._players[p]._reward_store.append(float(self._players[p]._tot_reward))
+            
             if isNotRandom:
+                # Add rewards to tensorboard
+                with self._players[p]._summary_writer.as_default():
+                    tfbare.summary.scalar('Rewards', float(self._players[p]._tot_reward), step = self._players[p]._summary_reward_step)
+                    self._players[p]._summary_reward_step += 1  
+            
+                # Append next state and its options to sample (idx 3 and 4 of sample)
                 if len(self._players[p]._sample) == 3:
                     self._players[p]._sample += [None, None]
                 if len(self._players[p]._sample) == 5:
                     self._players[p].add_sample()
-
+            
+                # Only start learning once memory has reached batch size
+                if len(self._players[p]._samples) > self.batchSize:
+                    
+                    # Learn!
+                    self._players[p].learn_by_replay()
+                
             # Reset player
-            self._players[p]._reward_store.append(float(self._players[p]._tot_reward))
             self._players[p]._tot_reward = 0
 
-            # Duplicate last 10 samples
-            for dup in range(1, min(11, self._turn_count)):
-                self._players[p]._samples += self._players[p]._samples[(dup*-1):]
-
-        # Now other team is the taggers
-        self._game._taggers = [t == False for t in self._game._taggers]
+#        # Now other team is the taggers
+#        self._game._taggers = [t == False for t in self._game._taggers]
 
     def write_video_text(self):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \
