@@ -75,10 +75,12 @@ class Arena(Config):
 
     def progress_bar(self, task, based_on='episodes', i=100):
         if based_on == 'episodes':
-            total = self.numEpisodesBeforePrint-1
+            total = self.numEpisodesBeforePrint
             percent = round(100 * (self.cnt % total / float(total)))
         elif based_on == 'i':
-            total = self.numEpisodesBeforePrint/10-1
+            total = self.numEpisodesBeforePrint/10
             percent = round(100 * (i % total / float(total)))
+        if percent > 97:
+            percent = 100
         bar = '█' * int(percent) + '-' * (100 - int(percent))
         print(f"\r|{bar}| {percent}%   {task}  ", end="")

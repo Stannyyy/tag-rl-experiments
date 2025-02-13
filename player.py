@@ -34,6 +34,7 @@ class Player(Model):
         self._steps = 0 if just_like is None else just_like._steps
         self._samples = [] if just_like is None else just_like._samples.copy()
         self._samplesAll = 0
+        self._learningSteps = 0
 
         # Render variables
         self._render = render
@@ -129,9 +130,18 @@ class Player(Model):
             if next_state is None:
                 corrected_q[action] = reward
             else:
-                prediction_next_state = np.amin([np.amax(q_s_a_d[i][options])])
+
+                prediction_next_state = np.amax(q_s_a_d[i][options])
 
                 corrected_q[action] = reward + self._discountFactor * prediction_next_state
+
+                # Add q to tensorboard
+                with self._summary_writer.as_default():
+                    tfbare.summary.scalar('Q', prediction_next_state, step=self._learningSteps)
+                    tfbare.summary.scalar('correctedQ', corrected_q[action], step=self._learningSteps)
+                    tfbare.summary.scalar('diff Q-correctedQ', prediction_next_state-corrected_q[action], step=self._learningSteps)
+                    tfbare.summary.scalar('diff Q-correctedReward', prediction_next_state/reward, step=self._learningSteps)
+                    self._learningSteps += 1
 
             x[i] = state
             y[i] = corrected_q
