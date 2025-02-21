@@ -21,7 +21,7 @@ class Config:
         self.numPlayers = numPlayers
         self.numTaggers = numTaggers
         self.numStates = 2 * numPlayers + 2
-        self.numActions = 8
+        self.numActions = 9
         
         # Match config
         self.numEpisodes = numEpisodes
