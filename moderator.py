@@ -140,6 +140,7 @@ class Moderator(Config):
                 # Add rewards to tensorboard
                 with self._players[p]._summary_writer.as_default():
                     tfbare.summary.scalar('Rewards', float(self._players[p]._tot_reward), step = self._players[p]._summary_reward_step)
+                    tfbare.summary.scalar('TurnCount', self._turn_count, step = self._players[p]._summary_reward_step)
                     self._players[p]._summary_reward_step += 1
 
                 # Append next state and its options to sample (idx 3 and 4 of sample)
