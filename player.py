@@ -213,7 +213,7 @@ class StillPlayer():
 
         # Identifying variables
         self._name = name
-        self.isRandom = False
+        self.isRandom = True
         self.isStill = True
 
         # Collection variables
