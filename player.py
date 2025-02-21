@@ -16,7 +16,7 @@ import tensorflow as tfbare
 class Player(Model):
 
     def __init__(self, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
-        learningRate = 0.0001, layers = [50,50], render=False, just_like = None):
+        learningRate = 0.001, layers = [50,50], render=False, just_like = None):
 
         # Import model
         Model.__init__(self, learningRate = learningRate, layers = layers)
@@ -139,9 +139,6 @@ class Player(Model):
                 # Add q to tensorboard
                 with self._summary_writer.as_default():
                     tfbare.summary.scalar('Q', prediction_next_state, step=self._learningSteps)
-                    tfbare.summary.scalar('correctedQ', corrected_q[action], step=self._learningSteps)
-                    tfbare.summary.scalar('diff Q-correctedQ', abs(prediction_next_state-corrected_q[action]), step=self._learningSteps)
-                    tfbare.summary.scalar('diff QReward', abs(prediction_next_state/reward), step=self._learningSteps)
                     self._learningSteps += 1
 
             x[i] = state
