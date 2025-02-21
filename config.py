@@ -2,7 +2,7 @@
 # Reinforcement learning model variables
 class Config:
     def __init__(self,
-                 maxEpsilon = 1, minEpsilon = 0, batchSize = 1000, maxMemory = 5000,
+                 maxEpsilon = 1, minEpsilon = 0, batchSize = 100, maxMemory = 5000,
                  gridSize = 10,
                  numPlayers = 2, numTaggers = 1,
                  renderSpeed = 0.3, createVideo = True,
