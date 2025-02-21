@@ -26,7 +26,8 @@ class Game(Config):
         self._y_list = [-1] * self.numPlayers
         self._taggers = [True] * self.numTaggers + [False] * (self.numPlayers - self.numTaggers)
         self._options = [0, 1, 2, 3,  # 0:up, 1:down, 2:left, 3:right,
-                         4, 5, 6, 7]  # 4:up left, 5:up right, 6:down left, 7:down right
+                         4, 5, 6, 7,  # 4:up left, 5:up right, 6:down left, 7:down right
+                         8]           # 8:dont move
         self._ended = False
 
         # Initialize game
@@ -106,6 +107,9 @@ class Game(Config):
         elif choice == 7:
             y = y + 1
             x = x + 1
+        elif choice == 8:
+            y = y
+            x = x
             
         self._y_list[turn] = y
         self._x_list[turn] = x

@@ -20,7 +20,7 @@ class Tag:
         self._y_list    = [-1] * NUM_PLAYERS
         self._p_list    = list(range(NUM_PLAYERS))
         self._taggers   = [True] * NUM_TAGGERS + [False] * (NUM_PLAYERS - NUM_TAGGERS)
-        self._options   = [0,1,2,3,4,5,6,7] # ['up','down','left','right','upleft','upright','downleft','downright']
+        self._options   = [0,1,2,3,4,5,6,7,8] # ['up','down','left','right','upleft','upright','downleft','downright','dontmove']
         self._viewer    = None
         self._tot_turns = 0
         self.random_game()
@@ -43,7 +43,7 @@ class Tag:
     def what_options(self,turn):
         x = self._x_list[turn]
         y = self._y_list[turn]
-        options = [0,1,2,3,4,5,6,7] # ['up','down','left','right','upleft','upright','downleft','downright']
+        options = [0,1,2,3,4,5,6,7,8] # ['up','down','left','right','upleft','upright','downleft','downright','dontmove']
             
         if y == 0:
             options[0] = -1

@@ -24,6 +24,7 @@ class Player(Model):
         # Identifying variables
         self._name = name if just_like is None else just_like._name + name
         self.isRandom = False
+        self.isStill = False
 
         # Model variables
         self._eps = self.maxEpsilon if just_like is None else just_like._eps
@@ -169,6 +170,7 @@ class RandomPlayer():
         # Identifying variables
         self._name = name
         self.isRandom = True
+        self.isStill = False
 
         # Collection variables
         self._reward_store = []
@@ -179,6 +181,50 @@ class RandomPlayer():
 
     def choose_action(self, options, save_game):
         return random.sample(options, k=1)[0]
+
+    def get_name(self):
+        return self._name
+    name = property(get_name)
+
+    def get_reward_store(self):
+        return self._reward_store
+    reward_store = property(get_reward_store)
+
+    def new_game(self):
+        self._tot_reward = 0
+
+    def set_state(self, state):
+        pass
+
+    def update_epsilon(self):
+        pass
+
+    def add_sample(self):
+        pass
+
+    def learn_by_replay(self):
+        pass
+
+
+# Player
+class StillPlayer():
+
+    def __init__(self, name):
+
+        # Identifying variables
+        self._name = name
+        self.isRandom = False
+        self.isStill = True
+
+        # Collection variables
+        self._reward_store = []
+
+        # State variables
+        self._reward = 0
+        self._tot_reward = 0
+
+    def choose_action(self):
+        return 8
 
     def get_name(self):
         return self._name
