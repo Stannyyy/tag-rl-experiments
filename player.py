@@ -223,7 +223,7 @@ class StillPlayer():
         self._reward = 0
         self._tot_reward = 0
 
-    def choose_action(self):
+    def choose_action(self, options, save_game):
         return 8
 
     def get_name(self):
