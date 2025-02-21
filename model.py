@@ -48,6 +48,7 @@ class Model(Config):
         log_dir = "logs/dql_" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self._summary_writer = tfbare.summary.create_file_writer(log_dir)
         self._summary_loss_step = 0
+        self._summary_params_step = 0
         self._summary_reward_step = 0
 
     def define_model(self):
@@ -84,10 +85,12 @@ class Model(Config):
         # Add losses to tensorboard
         with self._summary_writer.as_default():
             tfbare.summary.scalar('Losses', log.history.get('loss')[0], step = self._summary_loss_step)
-            for i, layer in enumerate(self._model.layers):
-                weights, biases = layer.get_weights()
-                tfbare.summary.histogram(f'Layer_{i}_weights', weights, step = self._summary_loss_step)
-                tfbare.summary.histogram(f'Layer_{i}_biases', biases, step = self._summary_loss_step)
+            if len(self._losses) % 100 == 0:
+                for i, layer in enumerate(self._model.layers):
+                    weights, biases = layer.get_weights()
+                    tfbare.summary.histogram(f'Layer_{i}_weights', weights, step = self._summary_params_step)
+                    tfbare.summary.histogram(f'Layer_{i}_biases', biases, step = self._summary_params_step)
+                self._summary_params_step += 1
             self._summary_loss_step += 1
 
     def mutate(self, model):

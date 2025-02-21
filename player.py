@@ -136,13 +136,13 @@ class Player(Model):
 
                 corrected_q[action] = reward + self._discountFactor * prediction_next_state
 
-                # Add q to tensorboard
-                with self._summary_writer.as_default():
-                    tfbare.summary.scalar('Q', prediction_next_state, step=self._learningSteps)
-                    self._learningSteps += 1
-
             x[i] = state
             y[i] = corrected_q
+
+        # Add q to tensorboard
+        with self._summary_writer.as_default():
+            tfbare.summary.scalar('Q', np.mean(y), step=self._learningSteps)
+            self._learningSteps += 1
 
         self.train_batch(x, y)
         self.update_epsilon()
