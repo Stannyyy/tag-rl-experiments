@@ -143,6 +143,9 @@ class Moderator(Config):
                     tfbare.summary.scalar('TurnCount', self._turn_count, step = self._players[p]._summary_reward_step)
                     self._players[p]._summary_reward_step += 1
 
+                    # Flush tensorboard
+                    self._players[p]._summary_writer.flush()
+
                 # Append next state and its options to sample (idx 3 and 4 of sample)
                 if len(self._players[p]._sample) == 3:
                     self._players[p]._sample += [None, None]
