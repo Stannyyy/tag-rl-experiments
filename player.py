@@ -16,24 +16,27 @@ import tensorflow as tfbare
 class Player(Model):
 
     def __init__(self, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
-        learningRate = 0.001, layers = [50,50], render=False, just_like = None):
+        learningRate = 0.001, layers = [50,50], render=False, justLike = None, loadFromPath = None):
 
         # Import model
         Model.__init__(self, learningRate = learningRate, layers = layers)
 
+        if loadFromPath is not None:
+            self.load_checkpoint(loadFromPath)
+
         # Identifying variables
-        self._name = name if just_like is None else just_like._name + name
+        self._name = name if justLike is None else justLike._name + name
         self.isRandom = False
         self.isStill = False
 
         # Model variables
-        self._eps = self.maxEpsilon if just_like is None else just_like._eps
+        self._eps = self.maxEpsilon if justLike is None else justLike._eps
         self._bootstrapValueEpsilon = bootstrapValueEpsilon  # formerly lambda
         self._discountFactor = discountFactor  # formerly gamma
 
-        # Experience variables (carrying over using just_like)
-        self._steps = 0 if just_like is None else just_like._steps
-        self._samples = [] if just_like is None else just_like._samples.copy()
+        # Experience variables (carrying over using justLike)
+        self._steps = 0 if justLike is None else justLike._steps
+        self._samples = [] if justLike is None else justLike._samples.copy()
         self._samplesAll = 0
         self._learningSteps = 0
 

@@ -20,8 +20,8 @@ config = retrieve_config()
 
 # Player
 class Player:
-    def __init__(self, name, model, render=False, just_like = None):
-        if just_like is None:
+    def __init__(self, name, model, render=False, justLike = None):
+        if justLike is None:
             self._name         = name
             self._env          = np.array([])
             self._model        = model
@@ -47,20 +47,20 @@ class Player:
             self._can_move     = True
             self._timeline     = []
         else:
-            self._name         = just_like._name + name
+            self._name         = justLike._name + name
             self._env          = np.array([])
             self._model        = model
             self._max_eps      = config['MAX_EPSILON']
             self._min_eps      = config['MIN_EPSILON']
-            self._eps          = just_like._eps
+            self._eps          = justLike._eps
             self._gamma        = config['GAMMA']
             self._lambda       = config['LAMBDA']
-            self._steps        = just_like._steps
+            self._steps        = justLike._steps
             self._reward_store = []
             self._turn_store   = []
             self._diff_memory  = []
             self._max_memory   = config['MAX_MEMORY']
-            self._samples      = just_like._samples.copy()
+            self._samples      = justLike._samples.copy()
             self._samples_this_game = []
             self._tot_reward   = 0
             self._random       = False

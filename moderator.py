@@ -100,8 +100,8 @@ class Moderator(Config):
             if self._turn_count >= 50:
                 self._game._ended = True
 
-            if self._game._ended == False:
-                self.next_turn()
+            # Determine next state
+            self.next_turn()
 
         # Create video
         if save_game:

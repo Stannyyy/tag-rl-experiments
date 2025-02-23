@@ -54,6 +54,10 @@ class Arena(Config):
                         print(self.modertr.players[p].name + ' = av loss: ' + str(av_loss) + ', eps: ' + str(eps) + ', av reward: ' + str(
                             av_rwd))
 
+                        # Check if learning done
+                        if av_loss < 0.001:
+                            self.cnt = self.numEpisodes # Call it a day
+
                 # Show a couple of episodes
                 for i in range(2):
                     self.modertr.play(self.createVideo)

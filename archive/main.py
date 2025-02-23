@@ -80,16 +80,16 @@ for generation in range(20):
     player9_model = players[winning_players[3]]._model; player9_model._alpha = new_alpha
     player0_model = Model(num_states, num_actions, new_alpha, player9_model.mutate())
 
-    players = [Player('a',player1_model, just_like = players[winning_players[0]]),
-               Player('b',player2_model, just_like = players[winning_players[0]]),
-               Player('c',player3_model, just_like = players[winning_players[0]]),
-               Player('d',player4_model, just_like = players[winning_players[1]]),
-               Player('e',player5_model, just_like = players[winning_players[1]]),
-               Player('f',player6_model, just_like = players[winning_players[1]]),
-               Player('g',player7_model, just_like = players[winning_players[2]]),
-               Player('h',player8_model, just_like = players[winning_players[2]]),
-               Player('i',player9_model, just_like = players[winning_players[3]]),
-               Player('j',player0_model, just_like = players[winning_players[3]])
+    players = [Player('a',player1_model, justLike = players[winning_players[0]]),
+               Player('b',player2_model, justLike = players[winning_players[0]]),
+               Player('c',player3_model, justLike = players[winning_players[0]]),
+               Player('d',player4_model, justLike = players[winning_players[1]]),
+               Player('e',player5_model, justLike = players[winning_players[1]]),
+               Player('f',player6_model, justLike = players[winning_players[1]]),
+               Player('g',player7_model, justLike = players[winning_players[2]]),
+               Player('h',player8_model, justLike = players[winning_players[2]]),
+               Player('i',player9_model, justLike = players[winning_players[3]]),
+               Player('j',player0_model, justLike = players[winning_players[3]])
                ]
 
 print(scoreboard)
