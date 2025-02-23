@@ -40,7 +40,6 @@ class Arena(Config):
 
                 # Print interim results
                 self.progress_bar(task='Print interim results')
-                print("\n")
                 for p in range(len(self.modertr.players)):
                     if self.modertr._randomPlayers[p]:
                         # Print progress
