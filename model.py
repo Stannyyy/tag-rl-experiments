@@ -44,24 +44,17 @@ class Model(Config):
         # Set up the models
         self._model = self.define_model()
 
-        # Set up the tensorboard
-        log_dir = "logs/dql_" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        self._summary_writer = tfbare.summary.create_file_writer(log_dir)
-        self._summary_loss_step = 0
-        self._summary_params_step = 0
-        self._summary_reward_step = 0
-
     def define_model(self):
         with tfbare.device('/gpu:0'):
             layers = []
             for layer_nr in range(len(self._layers)):
                 if layer_nr == 0:
                     layers += [tf.layers.Dense(self._layers[layer_nr],
-                                               activation=tf.layers.LeakyReLU(negative_slope=self._learningRate),
+                                               activation=tf.layers.LeakyReLU(alpha=self._learningRate),
                                                input_shape=[self.numStates])]
                 else:
                     layers += [tf.layers.Dense(self._layers[layer_nr],
-                                               activation=tf.layers.LeakyReLU(negative_slope=self._learningRate))]
+                                               activation=tf.layers.LeakyReLU(alpha=self._learningRate))]
             layers += [tf.layers.Dense(self.numActions, activation='linear')]
             model = tf.models.Sequential(layers)
             model.compile(loss='mse', optimizer=tf.optimizers.Adam(learning_rate=self._learningRate))

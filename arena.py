@@ -55,7 +55,7 @@ class Arena(Config):
                             av_rwd))
 
                         # Check if learning done
-                        if av_loss < 0.001:
+                        if av_loss < 0.0001:
                             self.cnt = self.numEpisodes # Call it a day
 
                 # Show a couple of episodes

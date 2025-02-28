@@ -129,9 +129,9 @@ class Game(Config):
 
         # Usually, a tagger gets some punishment for each move, a runner gets some reward for each move
         if is_tagger:
-            reward = -0.009 * self.gridSize
+            reward = -0.1 * self.gridSize
         else:
-            reward = 0.009 * self.gridSize
+            reward = 0.1 * self.gridSize
 
         # When the tagger caught the runner, the tagger gets a large reward and the runner a large punishment
         for caught in in_same_spot:
@@ -140,9 +140,9 @@ class Game(Config):
             
             if is_tagger != caught_is_tagger:
                 if is_tagger:
-                    reward = 0.11 * self.gridSize
+                    reward = 5.1 * self.gridSize
                 else:
-                    reward = -0.11 * self.gridSize
+                    reward = -5.1 * self.gridSize
 
                 self._ended = True
 
@@ -246,7 +246,7 @@ class Game(Config):
     def record(self, game_name):
         gif = []
         imgs = []
-        for filename in glob.glob(self.savePath + '*.png'):
+        for filename in glob.glob(self.savePath + '*.png')[1:]:
             pimg = Image.open(filename)
             imgs.append(pimg)
             imgs.append(pimg)
@@ -262,6 +262,8 @@ class Game(Config):
         del pimg
         del filename
         del img
-
-        for filename in glob.glob(self.savePath + '*.png'):
-            os.remove(filename)
+        try:
+            for filename in glob.glob(self.savePath + '*.png'):
+                os.remove(filename)
+        except:
+            print('skip')

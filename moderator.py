@@ -114,33 +114,16 @@ class Moderator(Config):
             # Is p random?
             isNotRandom = self._randomPlayers[p]==False
 
-            # When game ended because of max of turns, reward is multiplied by 10
-            if self._turn_count >= 50:
-                self._players[p]._tot_reward = self._players[p]._tot_reward - self._players[p]._reward
-                self._players[p]._reward = self._players[p]._reward * 10
-                self._players[p]._tot_reward = self._players[p]._tot_reward + self._players[p]._reward
-
-                if isNotRandom:
-                    self._players[p]._sample[2] = self._players[p]._reward
-
-
-            # Change the reward of the other player to be the negative of  the reward of the current player
-            elif (p != self._turn):
-                self._players[p]._tot_reward = self._players[p]._tot_reward - self._players[p]._reward
-                self._players[p]._reward = self._players[self._turn]._reward * -10
-                self._players[p]._tot_reward = self._players[p]._tot_reward + self._players[p]._reward
-                if isNotRandom:
-                    if len(self._players[p]._sample) >= 3:
-                        self._players[p]._sample[2] = self._players[p]._reward
-
             # Add rewards to reward store
             self._players[p]._reward_store.append(float(self._players[p]._tot_reward))
 
             if isNotRandom:
                 # Add rewards to tensorboard
                 with self._players[p]._summary_writer.as_default():
+
                     tfbare.summary.scalar('Rewards', float(self._players[p]._tot_reward), step = self._players[p]._summary_reward_step)
                     tfbare.summary.scalar('TurnCount', self._turn_count, step = self._players[p]._summary_reward_step)
+                    
                     self._players[p]._summary_reward_step += 1
 
                     # Flush tensorboard
