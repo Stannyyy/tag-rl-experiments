@@ -42,8 +42,8 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     p._summary_reward_step = 0
         
     pr = StillPlayer(name='Stable Sef')
-    mdrtr = Moderator([p, pr])
-    arn   = Arena(mdrtr, experiment = experiment, training_phase="part1")
+    mdrtr = Moderator([p, pr], experiment = experiment)
+    arn   = Arena(mdrtr, training_phase="part1")
     arn.play_and_learn()
     del pr
     del mdrtr
@@ -51,7 +51,7 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
 
     # Training phase 2: everyone plays 100.000 random games against Randy Rado, learning 1.000x every 10.000 games, but not updating epsilon
     pr = RandomPlayer(name='Randy Rado')
-    mdrtr = Moderator([p, pr])
+    mdrtr = Moderator([p, pr], experiment = experiment)
     arn   = Arena(mdrtr, training_phase="part2")
     arn.play_and_learn()
     del pr

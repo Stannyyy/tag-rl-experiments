@@ -6,7 +6,7 @@ import os
 
 # Arena
 class Arena(Config):
-    def __init__(self, modertr, experiment="defaultname", training_phase="default"):
+    def __init__(self, modertr, training_phase="default"):
 
         # Import config
         Config.__init__(self)
@@ -16,17 +16,16 @@ class Arena(Config):
         self.stt = time.time()
         self.loss_check = True
         self.modertr = modertr
-        self.experiment = experiment
         self.training_phase = training_phase
 
 
         # Initialize paths
-        if not os.path.exists(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}'):
-            os.mkdir(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}')
+        if not os.path.exists(os.getcwd() + modertr._experiment + f'/checkpoints/{training_phase}'):
+            os.mkdir(os.getcwd() + modertr._experiment + f'/checkpoints/{training_phase}')
         for player in self.modertr.players:
             name = player.name
-            if not os.path.exists(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}/{name}'):
-                os.mkdir(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}/{name}')
+            if not os.path.exists(os.getcwd() + modertr._experiment + f'/checkpoints/{training_phase}/{name}'):
+                os.mkdir(os.getcwd() + modertr._experiment + f'/checkpoints/{training_phase}/{name}')
 
     def play_and_learn(self):
         

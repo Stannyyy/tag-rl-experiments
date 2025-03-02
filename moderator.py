@@ -15,19 +15,20 @@ import tensorflow as tfbare
 # Moderate game
 class Moderator(Config):
 
-    def __init__(self, players):
+    def __init__(self, players, experiment="defaultname"):
 
         # Import config
         Config.__init__(self)
 
         # Moderator variables
+        self._experiment = experiment
         self._players = players
         self._randomPlayers = [p.isRandom for p in players]
         self._order_turns = random.sample(range(self.numPlayers), k=self.numPlayers)
         self._turn = self._order_turns[0]
         self._turn_count = 0
         self._game_continues = True
-        self._game = Game()
+        self._game = Game(experiment = experiment)
 
     def get_players(self):
         return self._players

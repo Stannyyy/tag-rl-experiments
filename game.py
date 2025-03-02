@@ -16,7 +16,7 @@ import os
 
 # Game
 class Game(Config):
-    def __init__(self):
+    def __init__(self, experiment="defaultname"):
 
         # Import config
         Config.__init__(self)
@@ -38,7 +38,7 @@ class Game(Config):
         self._prev_rendered = ''
 
         # Initialize save
-        self.savePath = os.getcwd() + self.experiment + '/results/'
+        self.savePath = os.getcwd() + experiment + '/results/'
     
     def init_random_game(self):
         self._x_list = [-1] * self.numPlayers
