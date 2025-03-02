@@ -15,11 +15,11 @@ import tensorflow as tfbare
 # Player
 class Player(Model):
 
-    def __init__(self, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
+    def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
         learningRate = 0.001, layers = [50,50], render=False, justLike = None, loadFromPath = None):
 
         # Import model
-        Model.__init__(self, learningRate = learningRate, layers = layers)
+        Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers)
 
         if loadFromPath is not None:
             self.load_checkpoint(loadFromPath)

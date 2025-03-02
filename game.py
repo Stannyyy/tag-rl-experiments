@@ -216,7 +216,7 @@ class Game(Config):
         draw = ImageDraw.Draw(image)
         
         # Draw text
-        font = ImageFont.load_default(10)
+        font = ImageFont.load_default()
         text_margin = 5
         draw.text((text_margin, text_margin), text, fill=(0, 0, 0), font=font)
 

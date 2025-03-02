@@ -18,16 +18,16 @@ if not os.path.exists(os.getcwd() + experiment + '/results'):
     os.mkdir(os.getcwd() + experiment + '/results')
 
 # Initialize players
-p00 = Player(name='Pietje Puk')
-p01 = Player(name='Liesje Lot', bootstrapValueEpsilon=0.0001)
-p02 = Player(name='Naima Nima', bootstrapValueEpsilon=0.01)
-p03 = Player(name='Samir Smit', layers=[25])                 
-p04 = Player(name='Biesje Bos', layers=[50,50,50])
-p05 = Player(name='Fatima Flo', learningRate=0.0001)
-p06 = Player(name='Omari Oost', learningRate=0.000001)
-p07 = Player(name='Lida Leeuw', discountFactor=0.995)
-p08 = Player(name='Kim Klasen', discountFactor=0.95)
-p09 = Player(name='Diego Delo', layers=[250,250])
+p00 = Player(experiment, name='Pietje Puk')
+p01 = Player(experiment, name='Liesje Lot', bootstrapValueEpsilon=0.0001)
+p02 = Player(experiment, name='Naima Nima', bootstrapValueEpsilon=0.01)
+p03 = Player(experiment, name='Samir Smit', layers=[25])
+p04 = Player(experiment, name='Biesje Bos', layers=[50,50,50])
+p05 = Player(experiment, name='Fatima Flo', learningRate=0.0001)
+p06 = Player(experiment, name='Omari Oost', learningRate=0.000001)
+p07 = Player(experiment, name='Lida Leeuw', discountFactor=0.995)
+p08 = Player(experiment, name='Kim Klasen', discountFactor=0.95)
+p09 = Player(experiment, name='Diego Delo', layers=[250,250])
 
 ### TRAINING PROGRAM ###
 

@@ -15,10 +15,13 @@ import datetime
 
 # Model game
 class Model(Config):
-    def __init__(self, model=None, learningRate = 0.0001, layers = [50,50]):
+    def __init__(self, experiment="defaultname", model=None, learningRate = 0.0001, layers = [50,50]):
 
         # Import config
         Config.__init__(self)
+
+        # Experiment name
+        self._experiment = experiment
 
         # Define model
         self._learningRate = learningRate  # formerly alpha
@@ -111,7 +114,7 @@ class Model(Config):
     def save_checkpoint(self, model, cnt, name, training_phase):
 
         # Save weights
-        model.save_weights(os.getcwd() + f'/checkpoints/{training_phase}/{name}/cp-{cnt:06d}.weights.h5')
+        model.save_weights(os.getcwd() + self._experiment + f'/checkpoints/{training_phase}/{name}/cp-{cnt:06d}.weights.h5')
 
     def load_checkpoint(self, path):
 
