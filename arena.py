@@ -6,7 +6,7 @@ import os
 
 # Arena
 class Arena(Config):
-    def __init__(self, modertr, training_phase="default"):
+    def __init__(self, modertr, experiment="defaultname", training_phase="default"):
 
         # Import config
         Config.__init__(self)
@@ -16,6 +16,7 @@ class Arena(Config):
         self.stt = time.time()
         self.loss_check = True
         self.modertr = modertr
+        self.experiment = experiment
         self.training_phase = training_phase
 
 

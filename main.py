@@ -43,7 +43,7 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
         
     pr = StillPlayer(name='Stable Sef')
     mdrtr = Moderator([p, pr])
-    arn   = Arena(mdrtr, training_phase="part1")
+    arn   = Arena(mdrtr, experiment = experiment, training_phase="part1")
     arn.play_and_learn()
     del pr
     del mdrtr
