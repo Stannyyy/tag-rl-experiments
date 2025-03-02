@@ -81,13 +81,14 @@ class Model(Config):
         # Add losses to tensorboard
         with self._summary_writer.as_default():
             tfbare.summary.scalar('Losses', log.history.get('loss')[0], step = self._summary_loss_step)
-            if len(self._losses) % 100 == 0:
+            self._summary_loss_step += 1
+            if len(self._losses) % 10000 == 0:
                 for i, layer in enumerate(self._model.layers):
                     weights, biases = layer.get_weights()
                     tfbare.summary.histogram(f'Layer_{i}_weights', weights, step = self._summary_params_step)
                     tfbare.summary.histogram(f'Layer_{i}_biases', biases, step = self._summary_params_step)
                 self._summary_params_step += 1
-            self._summary_loss_step += 1
+
 
     def mutate(self, model):
 
