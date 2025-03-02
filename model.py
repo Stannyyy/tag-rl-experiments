@@ -50,11 +50,11 @@ class Model(Config):
             for layer_nr in range(len(self._layers)):
                 if layer_nr == 0:
                     layers += [tf.layers.Dense(self._layers[layer_nr],
-                                               activation=tf.layers.LeakyReLU(negative_slope=self._learningRate),
+                                               activation=tf.layers.LeakyReLU(alpha=self._learningRate),
                                                input_shape=[self.numStates])]
                 else:
                     layers += [tf.layers.Dense(self._layers[layer_nr],
-                                               activation=tf.layers.LeakyReLU(negative_slope=self._learningRate))]
+                                               activation=tf.layers.LeakyReLU(alpha=self._learningRate))]
             layers += [tf.layers.Dense(self.numActions, activation='linear')]
             model = tf.models.Sequential(layers)
             model.compile(loss='mse', optimizer=tf.optimizers.Adam(learning_rate=self._learningRate))
