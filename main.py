@@ -12,7 +12,7 @@ experiment = "/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 # Initialize results paths
 if not os.path.exists(os.getcwd() + experiment + '/checkpoints'):
     os.mkdir(os.getcwd() + experiment + '/checkpoints')
-if not os.path.exists(os.getcwd() + '/results'):
+if not os.path.exists(os.getcwd() + experiment + '/results'):
     os.mkdir(os.getcwd() + experiment + '/results')
 
 # Initialize players
