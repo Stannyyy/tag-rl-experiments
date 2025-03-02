@@ -2,6 +2,7 @@
 # Reinforcement learning model variables
 class Config:
     def __init__(self,
+                 experiment = "defaultname",
                  maxEpsilon = 1, minEpsilon = 0.01, batchSize = 100, maxMemory = 5000,
                  gridSize = 10,
                  numPlayers = 2, numTaggers = 1,
@@ -9,7 +10,10 @@ class Config:
                  numEpisodes = 10001, numEpisodesBeforePrint = 100, minLoss = 1, numGamesShown = 100,
                  chanceOfMutation = 0.01
                 ):
-        
+
+        # Experiment name
+        self.experiment = experiment
+
         # Model config
         self.maxEpsilon = maxEpsilon
         self.minEpsilon = minEpsilon

@@ -38,7 +38,7 @@ class Game(Config):
         self._prev_rendered = ''
 
         # Initialize save
-        self.savePath = os.getcwd() + r'/results/'
+        self.savePath = os.getcwd() + self.experiment + '/results/'
     
     def init_random_game(self):
         self._x_list = [-1] * self.numPlayers

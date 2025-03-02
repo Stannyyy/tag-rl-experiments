@@ -20,12 +20,12 @@ class Arena(Config):
 
 
         # Initialize paths
-        if not os.path.exists(os.getcwd() + f'/checkpoints/{training_phase}'):
-            os.mkdir(os.getcwd() + f'/checkpoints/{training_phase}')
+        if not os.path.exists(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}'):
+            os.mkdir(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}')
         for player in self.modertr.players:
             name = player.name
-            if not os.path.exists(os.getcwd() + f'/checkpoints/{training_phase}/{name}'):
-                os.mkdir(os.getcwd() + f'/checkpoints/{training_phase}/{name}')
+            if not os.path.exists(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}/{name}'):
+                os.mkdir(os.getcwd() + self.experiment + f'/checkpoints/{training_phase}/{name}')
 
     def play_and_learn(self):
         

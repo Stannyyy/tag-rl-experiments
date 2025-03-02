@@ -6,11 +6,14 @@ import os
 import datetime
 import tensorflow as tfbare
 
+# Experiment
+experiment = "/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
 # Initialize results paths
-if not os.path.exists(os.getcwd() + '/checkpoints'):
-    os.mkdir(os.getcwd() + '/checkpoints')
+if not os.path.exists(os.getcwd() + experiment + '/checkpoints'):
+    os.mkdir(os.getcwd() + experiment + '/checkpoints')
 if not os.path.exists(os.getcwd() + '/results'):
-    os.mkdir(os.getcwd() + '/results')
+    os.mkdir(os.getcwd() + experiment + '/results')
 
 # Initialize players
 p00 = Player(name='Pietje Puk')
@@ -30,7 +33,7 @@ p09 = Player(name='Diego Delo', layers=[250,250])
 for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     
     # Set up the tensorboard
-    log_dir = "logs/dql_" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_dir = experiment + "/logs/dql_" + p._name
     p._summary_writer = tfbare.summary.create_file_writer(log_dir)
     p._summary_loss_step = 0
     p._summary_params_step = 0
