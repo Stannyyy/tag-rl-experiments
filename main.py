@@ -35,7 +35,7 @@ p09 = Player(experiment, name='Diego Delo', layers=[250,250])
 for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     
     # Set up the tensorboard
-    log_dir = experiment + "/logs/dql_" + p._name
+    log_dir = os.getcwd() + experiment + "/logs/dql_" + p._name
     p._summary_writer = tfbare.summary.create_file_writer(log_dir)
     p._summary_loss_step = 0
     p._summary_params_step = 0
