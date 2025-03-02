@@ -10,6 +10,8 @@ import tensorflow as tfbare
 experiment = "/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 # Initialize results paths
+if not os.path.exists(os.getcwd() + experiment):
+    os.mkdir(os.getcwd() + experiment)
 if not os.path.exists(os.getcwd() + experiment + '/checkpoints'):
     os.mkdir(os.getcwd() + experiment + '/checkpoints')
 if not os.path.exists(os.getcwd() + experiment + '/results'):
