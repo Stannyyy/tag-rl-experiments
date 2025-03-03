@@ -38,7 +38,7 @@ p09 = Player(experiment, name='Diego Delo', layers=[250,250])
 for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
 
     # If state exists, load state
-    last_state = os.getcwd() + "/state" + experiment + "/" + p._name + "-part1.pickle"
+    last_state = os.getcwd() + experiment + "/state" + "/" + p._name + "-part1.pickle"
     if os.path.exists(last_state):
         arn = pickle.load(open(last_state, "rb", -1))
     else:
