@@ -173,10 +173,8 @@ class Player(Model):
     def reload(self):
         checkpoints = os.listdir(self._checkpoint_path)
         checkpoints.sort()
-        logs = os.listdir(self._log_path)
-        logs.sort()
         self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
-        self.load_summary_writer = tfbare.summary.create_file_writer(self._log_path + logs[-1])
+        self._summary_writer = tfbare.summary.create_file_writer(self._log_path)
 
     def new_part(self, current_part, new_part):
         self._state_path = self._state_path.replace(current_part, new_part)

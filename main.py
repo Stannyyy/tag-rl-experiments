@@ -8,7 +8,7 @@ import tensorflow as tfbare
 import pickle
 
 # Experiment
-experiment = "/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+experiment = "/experiment-20250303-152902"#"/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 # Initialize results paths
 if not os.path.exists(os.getcwd() + experiment):
@@ -38,9 +38,11 @@ p09 = Player(experiment, name='Diego Delo', layers=[250,250])
 for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
 
     # If state exists, load state
-    last_state = os.getcwd() + "/state" + experiment + "/" + p._name + "-part1.pickle"
-    if os.path.exists(last_state):
-        arn = pickle.load(open(last_state, "rb", -1))
+    if os.path.exists(p._state_path):
+        arn = pickle.load(open(p._state_path, "rb", -1))
+        p = arn.modertr.players[0]
+        p._model = p.define_model()
+        p.reload()
     else:
         pr = StillPlayer(name='Stable Sef')
         mdrtr = Moderator([p, pr], experiment = experiment)
@@ -57,7 +59,9 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     # If state exists, load state
     if os.path.exists(p._state_path):
         arn = pickle.load(open(p._state_path, "rb", -1))
-        arn.modertr.players[0].reload()
+        p = arn.modertr.players[0]
+        p._model = p.define_model()
+        p.reload()
     else:
         pr = RandomPlayer(name='Randy Rado')
         mdrtr = Moderator([p, pr], experiment = experiment)
