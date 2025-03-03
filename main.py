@@ -40,7 +40,6 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     if os.path.exists(p._state_path):
         arn = pickle.load(open(p._state_path, "rb", -1))
         p = arn.modertr.players[0]
-        p._model = p.define_model()
         p.reload()
         pr = None
         mdrtr = None
@@ -61,7 +60,6 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     if os.path.exists(p._state_path):
         arn = pickle.load(open(p._state_path, "rb", -1))
         p = arn.modertr.players[0]
-
         p.reload()
         pr
     else:

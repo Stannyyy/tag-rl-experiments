@@ -11,7 +11,6 @@ import tensorflow as tfbare
 import tensorflow.keras as tf
 import numpy as np
 from config import Config
-import datetime
 
 # Model game
 class Model(Config):
@@ -45,7 +44,7 @@ class Model(Config):
         self.cp_callback = None
 
         # Set up the models
-        self._model = self.define_model()
+        self.define_model()
 
     def define_model(self):
         with tfbare.device('/gpu:0'):
