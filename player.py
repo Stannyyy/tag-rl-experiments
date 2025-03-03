@@ -170,6 +170,14 @@ class Player(Model):
     def new_game(self):
         self._tot_reward = 0
 
+    def reload(self):
+        checkpoints = os.listdir(self._checkpoint_path)
+        checkpoints.sort()
+        logs = os.listdir(self._log_path)
+        logs.sort()
+        self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
+        self.load_summary_writer = tfbare.summary.create_file_writer(self._log_path + logs[-1])
+
 
 # Player
 class RandomPlayer():
@@ -212,6 +220,9 @@ class RandomPlayer():
         pass
 
     def learn_by_replay(self):
+        pass
+
+    def reload(self):
         pass
 
 
@@ -259,9 +270,4 @@ class StillPlayer():
         pass
 
     def reload(self):
-        checkpoints = os.listdir(self._checkpoint_path)
-        checkpoints.sort()
-        logs = os.listdir(self._log_path)
-        logs.sort()
-        self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
-        self.load_summary_writer = tfbare.summary.create_file_writer(self._log_path + logs[-1])
+        pass
