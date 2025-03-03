@@ -53,7 +53,7 @@ class Player(Model):
         self._tot_reward = 0
 
         # Save intermittant folders
-        self._state_path = os.getcwd() + experiment + "/state/part1-" + self._name + ".pickle"
+        self._state_path = os.getcwd() + experiment + "/state/part1-" + self._name.replace(" ","") + ".pickle"
         self._checkpoint_path = os.getcwd() + experiment + "/checkpoints/part1/" + self._name + "/"
         self._log_path = os.getcwd() + experiment + "/logs/dql_" + self._name + "/"
 
