@@ -53,8 +53,8 @@ class Player(Model):
         self._tot_reward = 0
 
         # Save intermittant folders
-        self._state_path = os.getcwd() + experiment + "/state/part2-" + self._name + ".pickle"
-        self._checkpoint_path = os.getcwd() + experiment + "/checkpoints/part2/" + self._name + "/"
+        self._state_path = os.getcwd() + experiment + "/state/part1-" + self._name + ".pickle"
+        self._checkpoint_path = os.getcwd() + experiment + "/checkpoints/part1/" + self._name + "/"
         self._log_path = os.getcwd() + experiment + "/logs/dql_" + self._name + "/"
 
         # Set up the tensorboard
@@ -177,6 +177,10 @@ class Player(Model):
         logs.sort()
         self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
         self.load_summary_writer = tfbare.summary.create_file_writer(self._log_path + logs[-1])
+
+    def new_part(self, current_part, new_part):
+        self._state_path = self._state_path.replace(current_part, new_part)
+        self._checkpoint_path = self._state_path.replace(current_part, new_part)
 
 
 # Player

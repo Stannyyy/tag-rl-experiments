@@ -52,6 +52,7 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     del arn
 
     # Training phase 2: everyone plays 100.000 random games against Randy Rado, learning 1.000x every 10.000 games, but not updating epsilon
+    p.new_part("part1","part2")
 
     # If state exists, load state
     if os.path.exists(p._state_path):
