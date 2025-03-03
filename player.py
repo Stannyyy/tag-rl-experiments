@@ -179,7 +179,7 @@ class Player(Model):
 
     def new_part(self, current_part, new_part):
         self._state_path = self._state_path.replace(current_part, new_part)
-        self._checkpoint_path = self._state_path.replace(current_part, new_part)
+        self._checkpoint_path = self._checkpoint_path.replace(current_part, new_part)
 
 
 # Player
