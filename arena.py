@@ -75,6 +75,7 @@ class Arena(Config):
                         p._summary_writer = ''
                         with open(p._state_path, "wb") as file_:
                             pickle.dump(self, file_, -1)
+                        p.define_model()
                         p.reload()
 
                 # Start new timer
