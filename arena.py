@@ -3,6 +3,7 @@ import time
 import numpy as np
 from config import Config
 import os
+import pickle
 
 # Arena
 class Arena(Config):
@@ -67,6 +68,10 @@ class Arena(Config):
                     if p.isRandom == False:
                         self.progress_bar(task='Saving checkpoint')
                         p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
+
+                # Save state
+                with open(self.modertr._experiment + "/" + self.modertr.players[0]._name + "/" + self.training_phase + ".pickle", "wb") as file_:
+                    pickle.dump(self, file_, -1)
 
                 # Start new timer
                 self.stt = time.time()

@@ -254,9 +254,10 @@ class Game(Config):
 
         for img in imgs:
             gif.append(img)
-
-        gif[0].save(self.savePath + game_name + '.gif', save_all=True, optimize=False, append_images=gif[1:], loop=0)
-
+        try:
+            gif[0].save(self.savePath + game_name + '.gif', save_all=True, optimize=False, append_images=gif[1:], loop=0)
+        except:
+            print("Failed saving to gif")
         del gif
         del imgs
         del pimg
