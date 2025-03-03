@@ -171,6 +171,7 @@ class Player(Model):
         self._tot_reward = 0
 
     def reload(self):
+        self.define_model()
         checkpoints = os.listdir(self._checkpoint_path)
         checkpoints.sort()
         self.load_checkpoint(self._checkpoint_path + checkpoints[-1])

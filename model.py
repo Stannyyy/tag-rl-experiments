@@ -61,7 +61,7 @@ class Model(Config):
             layers += [tf.layers.Dense(self.numActions, activation='linear')]
             model = tf.models.Sequential(layers)
             model.compile(loss='mse', optimizer=tf.optimizers.Adam(learning_rate=self._learningRate))
-        return model
+        self._model = model
 
     def predict_one(self, state):
         prediction = self._model.predict(np.array(state).reshape(1, self.numStates), verbose=0)[0]

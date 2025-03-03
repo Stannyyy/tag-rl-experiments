@@ -4,11 +4,10 @@ from player import Player, RandomPlayer, StillPlayer
 from arena import Arena
 import os
 import datetime
-import tensorflow as tfbare
 import pickle
 
 # Experiment
-experiment = "/experiment-20250303-152902"#"/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+experiment = "/experiment-20250303-1547"#"/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M")
 
 # Initialize results paths
 if not os.path.exists(os.getcwd() + experiment):
@@ -43,6 +42,8 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
         p = arn.modertr.players[0]
         p._model = p.define_model()
         p.reload()
+        pr = None
+        mdrtr = None
     else:
         pr = StillPlayer(name='Stable Sef')
         mdrtr = Moderator([p, pr], experiment = experiment)
@@ -60,8 +61,9 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     if os.path.exists(p._state_path):
         arn = pickle.load(open(p._state_path, "rb", -1))
         p = arn.modertr.players[0]
-        p._model = p.define_model()
+
         p.reload()
+        pr
     else:
         pr = RandomPlayer(name='Randy Rado')
         mdrtr = Moderator([p, pr], experiment = experiment)
