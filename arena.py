@@ -70,7 +70,7 @@ class Arena(Config):
                         p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
 
                 # Save state
-                with open(os.getcwd() + "/state" + self.modertr._experiment + "/" + self.modertr.players[0]._name + "/" + self.training_phase + ".pickle", "wb") as file_:
+                with open(os.getcwd() + "/state" + self.modertr._experiment + "/" + self.modertr.players[0]._name + "-" + self.training_phase + ".pickle", "wb") as file_:
                     pickle.dump(self, file_, -1)
 
                 # Start new timer
