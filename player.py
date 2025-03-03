@@ -11,18 +11,16 @@ import numpy as np
 import math
 from model import Model
 import tensorflow as tfbare
+import os
 
 # Player
 class Player(Model):
 
     def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
-        learningRate = 0.001, layers = [50,50], render=False, justLike = None, loadFromPath = None):
+        learningRate = 0.001, layers = [50,50], render=False, justLike = None):
 
         # Import model
         Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers)
-
-        if loadFromPath is not None:
-            self.load_checkpoint(loadFromPath)
 
         # Identifying variables
         self._name = name if justLike is None else justLike._name + name
@@ -53,6 +51,17 @@ class Player(Model):
         # State variables
         self._reward = 0
         self._tot_reward = 0
+
+        # Save intermittant folders
+        self._state_path = os.getcwd() + experiment + "/state/part2-" + self._name + ".pickle"
+        self._checkpoint_path = os.getcwd() + experiment + "/checkpoints/part2/" + self._name + "/"
+        self._log_path = os.getcwd() + experiment + "/logs/dql_" + self._name + "/"
+
+        # Set up the tensorboard
+        self._summary_writer = tfbare.summary.create_file_writer(self._log_path)
+        self._summary_loss_step = 0
+        self._summary_params_step = 0
+        self._summary_reward_step = 0
 
     def choose_action(self, options, save_game):
 
@@ -249,3 +258,10 @@ class StillPlayer():
     def learn_by_replay(self):
         pass
 
+    def reload(self):
+        checkpoints = os.listdir(self._checkpoint_path)
+        checkpoints.sort()
+        logs = os.listdir(self._log_path)
+        logs.sort()
+        self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
+        self.load_summary_writer = tfbare.summary.create_file_writer(self._log_path + logs[-1])

@@ -38,18 +38,10 @@ p09 = Player(experiment, name='Diego Delo', layers=[250,250])
 for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
 
     # If state exists, load state
-    last_state = os.getcwd() + experiment + "/state" + "/" + p._name + "-part1.pickle"
-    if os.path.exists(last_state):
-        arn = pickle.load(open(last_state, "rb", -1))
+    if os.path.exists(p._state_path):
+        arn = pickle.load(open(p._state_path, "rb", -1))
+        arn.modertr.players[0].reload()
     else:
-
-        # Set up the tensorboard
-        log_dir = os.getcwd() + experiment + "/logs/dql_" + p._name
-        p._summary_writer = tfbare.summary.create_file_writer(log_dir)
-        p._summary_loss_step = 0
-        p._summary_params_step = 0
-        p._summary_reward_step = 0
-
         pr = StillPlayer(name='Stable Sef')
         mdrtr = Moderator([p, pr], experiment = experiment)
         arn   = Arena(mdrtr, training_phase="part1")
@@ -62,8 +54,9 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
     # Training phase 2: everyone plays 100.000 random games against Randy Rado, learning 1.000x every 10.000 games, but not updating epsilon
 
     # If state exists, load state
-    if os.path.exists(os.getcwd() + experiment + "/" + p._name + "/part2.pickle"):
-        arn = pickle.load(open("filename.pickle", "rb", -1))
+    if os.path.exists(p._state_path):
+        arn = pickle.load(open(p._state_path, "rb", -1))
+        arn.modertr.players[0].reload()
     else:
         pr = RandomPlayer(name='Randy Rado')
         mdrtr = Moderator([p, pr], experiment = experiment)

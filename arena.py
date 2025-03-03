@@ -4,6 +4,7 @@ import numpy as np
 from config import Config
 import os
 import pickle
+import tensorflow as tfbare
 
 # Arena
 class Arena(Config):
@@ -69,9 +70,12 @@ class Arena(Config):
                         self.progress_bar(task='Saving checkpoint')
                         p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
 
-                # Save state
-                with open(os.getcwd() + self.modertr._experiment + "/state" + "/" + self.modertr.players[0]._name + "-" + self.training_phase + ".pickle", "wb") as file_:
-                    pickle.dump(self, file_, -1)
+                        # Save state
+                        p._model = 0
+                        p._summary_writer = ''
+                        with open(p._state_path, "wb") as file_:
+                            pickle.dump(self, file_, -1)
+                        p.reload()
 
                 # Start new timer
                 self.stt = time.time()
