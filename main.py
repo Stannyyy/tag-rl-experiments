@@ -61,7 +61,8 @@ for i, p in enumerate([p00,p01,p02,p03,p04,p05,p06,p07,p08,p09]):
         arn = pickle.load(open(p._state_path, "rb", -1))
         p = arn.modertr.players[0]
         p.reload()
-        pr
+        pr = None
+        mdrtr = None
     else:
         pr = RandomPlayer(name='Randy Rado')
         mdrtr = Moderator([p, pr], experiment = experiment)
