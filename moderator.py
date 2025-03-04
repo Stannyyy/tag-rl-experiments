@@ -34,6 +34,9 @@ class Moderator(Config):
         return self._players
     players = property(get_players)
 
+    def shuffle_players(self):
+        random.shuffle(self._players)
+
     def next_turn(self):
         idx = self._order_turns.index(self._turn)
         idx += 1
@@ -59,26 +62,25 @@ class Moderator(Config):
         # Start game
         while self._game._ended == False:
 
-            # Player who's turn it is, is random
-            isNotRandom = self._randomPlayers[self._turn]==False
+            # Determine next state
+            self.next_turn()
+            player = self._players[self._turn]
 
             # Get options for player
             options = self._game.what_options(self._turn)
 
-            # Align game and player state
-            if isNotRandom:
-                self._players[self._turn].set_state(self._game._x_list + self._game._y_list +
-                                                    [self._turn, int(self._game._taggers[self._turn])])
+            # Set new player state
+            player.set_state(self._game._x_list,
+                             self._game._y_list,
+                             self._turn,
+                             self._game._taggers[self._turn])
 
-                # Append next state and its options to sample (idx 3 and 4 of sample)
-                if len(self._players[self._turn]._sample) == 3:
-                    self._players[self._turn]._sample += [self._players[self._turn]._state,
-                                                          options]
-                if len(self._players[self._turn]._sample) == 5:
-                    self._players[self._turn].add_sample()
+            # Append next state and its options to sample (idx 3 and 4 of sample)
+            player.update_sample(options)
+            player.add_sample()
 
             # Make a move!
-            choice = self._players[self._turn].choose_action(options, save_game)
+            choice = player.choose_action(options, save_game)
             reward = self._game.move(self._turn, choice)
             self._turn_count += 1
 
@@ -86,11 +88,10 @@ class Moderator(Config):
             if save_game:
                 self._game.render()
 
-            # Append to sample (idx 0, 1, 2 of sample)
-            self._players[self._turn]._reward = reward
-            self._players[self._turn]._tot_reward += reward
-            if isNotRandom:
-                self._players[self._turn]._sample = [self._players[self._turn]._state, choice, reward]
+            # Set new sample: state, choice, reward (idx 0, 1, 2 of sample)
+            player._reward = reward
+            player._tot_reward += reward
+            player.set_sample(choice, reward)
             
             # Write if save video
             if save_game:
@@ -101,49 +102,35 @@ class Moderator(Config):
             if self._turn_count >= 50:
                 self._game._ended = True
 
-            # Determine next state
-            self.next_turn()
-
         # Create video
         if save_game:
             game_name = ' is playing against '.join([p._name for p in self._players]) + ' on ' + datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
             self._game.record(game_name)
 
         # All players learn!
-        for p in range(self.numPlayers):
-
-            # Is p random?
-            isNotRandom = self._randomPlayers[p]==False
+        for player in self._players:
 
             # Add rewards to reward store
-            self._players[p]._reward_store.append(float(self._players[p]._tot_reward))
+            player.update_reward_store()
 
-            if isNotRandom:
-                # Add rewards to tensorboard
-                with self._players[p]._summary_writer.as_default():
+            # Add rewards to tensorboard
+            player.add_rewards_to_tensorboard(self._turn_count)
 
-                    tfbare.summary.scalar('Rewards', float(self._players[p]._tot_reward), step = self._players[p]._summary_reward_step)
-                    tfbare.summary.scalar('TurnCount', self._turn_count, step = self._players[p]._summary_reward_step)
-                    
-                    self._players[p]._summary_reward_step += 1
+            # Append next state and its options to sample (idx 3 and 4 of sample)
+            player.update_sample(None)
 
-                    # Flush tensorboard
-                    self._players[p]._summary_writer.flush()
+            # Finalize sample buffer
+            player.add_sample()
+            player.finalize_sample_buffer()
 
-                # Append next state and its options to sample (idx 3 and 4 of sample)
-                if len(self._players[p]._sample) == 3:
-                    self._players[p]._sample += [None, None]
-                if len(self._players[p]._sample) == 5:
-                    self._players[p].add_sample()
-
-                # Only start learning once memory has reached batch size
-                if len(self._players[p]._samples) > self.batchSize:
-
-                    # Learn!
-                    self._players[p].learn_by_replay()
+            # Learn!
+            player.learn_by_replay(self.batchSize)
 
             # Reset player
-            self._players[p]._tot_reward = 0
+            player._tot_reward = 0
+
+        # Shuffle players for robustness
+        self.shuffle_players()
 
     def write_video_text(self):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \
@@ -158,3 +145,13 @@ class Moderator(Config):
         print({False:'o',True:'x'}.get(self._game._taggers[self._turn]))
         print({0:'up', 1:'down', 2:'left', 3:'right',
                4:'up left', 5:'up right', 6:'down left', 7:'down right'}.get(choice))
+
+    def describe_sample(self, sample):
+        print("Sample: ", sample)
+        print("Role: ", {0: 'runner', 1: 'tagger'}.get(sample[0][5]))
+        print("Turn: ", {0: 'left', 1: 'right'}.get(sample[0][4]))
+        print("Left x,y: ", sample[0][0], sample[0][2])
+        print("Right x,y: ", sample[0][1], sample[0][3])
+        print("Choice: ", {0:'up', 1:'down', 2:'left', 3:'right',
+               4:'up left', 5:'up right', 6:'down left', 7:'down right'}.get(sample[1]))
+        print("Reward: ", sample[2])

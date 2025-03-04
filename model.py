@@ -114,7 +114,7 @@ class Model(Config):
     def save_checkpoint(self, model, cnt, name, training_phase):
 
         # Save weights
-        model.save_weights(os.getcwd() + self._experiment + f'/checkpoints/{training_phase}/{name}/cp-{cnt:06d}.weights.h5')
+        model.save_weights(os.getcwd() + self._experiment + f'/checkpoints/{name}/{training_phase}/cp-{cnt:06d}.weights.h5')
 
     def load_checkpoint(self, path):
 

@@ -53,6 +53,9 @@ class Game(Config):
                     self._x_list[i] = x
                     self._y_list[i] = y
                     break
+
+        if random.random() < .5:
+            self._taggers = [t==False for t in self._taggers]
         self._ended = False
     
     # Move options        
@@ -84,30 +87,30 @@ class Game(Config):
         options = [o for o in options if o != -1]
         return options
     
-    def move(self, turn, choice):    
+    def move(self, turn, choice):
         x = self._x_list[turn]
         y = self._y_list[turn]
-        if choice == 0:
+        if choice == 0: #up
             y = y - 1
-        elif choice == 1:
+        elif choice == 1: #down
             y = y + 1
-        elif choice == 2:
+        elif choice == 2: #left
             x = x - 1
-        elif choice == 3:
+        elif choice == 3: #right
             x = x + 1
-        elif choice == 4:
+        elif choice == 4: #up left
             y = y - 1
             x = x - 1
-        elif choice == 5:
+        elif choice == 5: #up right
             y = y - 1
             x = x + 1
-        elif choice == 6:
+        elif choice == 6: #down left
             y = y + 1
             x = x - 1
-        elif choice == 7:
+        elif choice == 7: #down right
             y = y + 1
             x = x + 1
-        elif choice == 8:
+        elif choice == 8: #dont move
             y = y
             x = x
             

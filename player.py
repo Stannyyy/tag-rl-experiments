@@ -17,7 +17,7 @@ import os
 class Player(Model):
 
     def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
-        learningRate = 0.001, layers = [50,50], render=False, justLike = None):
+        learningRate = 0.001, layers = [100,100,100], render=False, justLike=None, test_mode=False):
 
         # Import model
         Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers)
@@ -35,7 +35,8 @@ class Player(Model):
         # Experience variables (carrying over using justLike)
         self._steps = 0 if justLike is None else justLike._steps
         self._samples = [] if justLike is None else justLike._samples.copy()
-        self._samplesAll = 0
+        self._samples_count = 0
+        self._sample_buffer = []
         self._learningSteps = 0
 
         # Render variables
@@ -52,9 +53,12 @@ class Player(Model):
         self._reward = 0
         self._tot_reward = 0
 
+        # Is the player learning? Of temporarily paused due to test mode?
+        self._test_mode = test_mode
+
         # Save intermittant folders
         self._state_path = os.getcwd() + experiment + "/state/part1-" + self._name.replace(" ","") + ".pickle"
-        self._checkpoint_path = os.getcwd() + experiment + "/checkpoints/part1/" + self._name + "/"
+        self._checkpoint_path = os.getcwd() + experiment + "/checkpoints/" + self._name + "/part1/"
         self._log_path = os.getcwd() + experiment + "/logs/dql_" + self._name + "/"
 
         # Set up the tensorboard
@@ -95,25 +99,89 @@ class Player(Model):
         return self._eps
     eps = property(get_eps)
 
+    def set_eps(self, eps):
+        self._eps = eps
+    eps = property(get_eps, set_eps)
+
     def get_samples(self):
         return self._samples
+    samples = property(get_eps)
+
     def set_samples(self, samples):
         self._samples = samples
     samples = property(get_samples, set_samples)
 
-    def set_state(self, state):
-        self._state = state
+    def get_state(self):
+        return self._state
+    state = property(get_state)
+
+    def set_state(self, game_x_list, game_y_list, turn, is_tagger):
+        self._state = game_x_list + game_y_list + [turn, int(is_tagger)]
     state = property(set_state)
-    
+
+    def get_sample(self):
+        return self._sample
+    sample = property(get_sample)
+
+    def set_sample(self, choice, reward):
+        self._sample = [self._state, choice, reward]
+    sample = property(get_sample, set_sample)
+
+    def update_sample(self, options):
+        if options is None:
+            self._sample += [None, None]
+        if len(self._sample) == 3:
+            self._sample += [self._state, options]
+
     def add_sample(self):
-        if len(self._sample) == 5 and len(self._sample[0]) == 6:
-            self._samplesAll += 1
+        if len(self._sample) != 5:
+            self.finalize_sample_buffer()
+
+        if self._sample != []:
+            if len(self._sample) < 4:
+                self._sample = []
+            elif self._sample[3] is not None:
+                if self._sample[0][-2] != self._sample[3][-2]: # If role of current and next state are different
+                    self._sample_buffer += [self._sample]      # due to player playing against itself: buffer to correct
+                    self.correct_sample_buffer()
+
+        if self._sample != []:
+            self._samples_count += 1
             self._samples += [self._sample]
             self._sample = []
         if len(self._samples) > self.maxMemory:
             self._samples = self._samples[-self.maxMemory:]
+    
+    def correct_sample_buffer(self):
+        sample_to_correct = self._sample_buffer[0]
+        turn = sample_to_correct[0][-2]
+        for _sample in self._sample_buffer:
+            if _sample[3] is not None:
+                if _sample[3][-2] == turn:
+                    sample_to_correct[-2:] = _sample[-2:]
+                    self._sample = sample_to_correct
+                    self._sample_buffer = self._sample_buffer[1:]
+                    break
+        if sample_to_correct[3][-2] != turn:
+            self._sample = []
 
-    def learn_by_replay(self):
+    def finalize_sample_buffer(self):
+        for _sample in self._sample_buffer:
+            _sample[3] = None
+            _sample[4] = None
+            if abs(self._reward) > abs(_sample[2]):
+                if (_sample[2] > 0) == (self._reward > 0):
+                    _sample[2] = self._reward * -1
+                else:
+                    _sample[2] = self._reward
+            self._sample = _sample
+            self.add_sample()
+        self._sample_buffer = []
+
+    def learn_by_replay(self, batch_size):
+        # Only learn once memory has reached batch size and not in test mode
+        if (self._test_mode) | (len(self._samples) <= batch_size):
+            return 0
 
         # Make random batch
         batch = random.sample(self._samples, k=self.batchSize)
@@ -158,6 +226,9 @@ class Player(Model):
 
         self.train_batch(x, y)
         self.update_epsilon()
+
+    def update_reward_store(self):
+        self._reward_store.append(float(self._tot_reward))
         
     def update_epsilon(self):
         self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(-self._bootstrapValueEpsilon * self._steps)
@@ -166,6 +237,14 @@ class Player(Model):
         # Add losses to tensorboard
         with self._summary_writer.as_default():
             tfbare.summary.scalar('Epsilon', self._eps, step = self._steps)
+
+    def add_rewards_to_tensorboard(self, turn_count):
+        with self._summary_writer.as_default():
+            tfbare.summary.scalar('Rewards', float(self._tot_reward),
+                                  step=self._summary_reward_step)
+            tfbare.summary.scalar('TurnCount', turn_count,
+                                  step=self._summary_reward_step)
+            self._summary_reward_step += 1
 
     def new_game(self):
         self._tot_reward = 0
@@ -185,7 +264,7 @@ class Player(Model):
 # Player
 class RandomPlayer():
 
-    def __init__(self, name):
+    def __init__(self, name, test_mode=True):
 
         # Identifying variables
         self._name = name
@@ -198,6 +277,9 @@ class RandomPlayer():
         # State variables
         self._reward = 0
         self._tot_reward = 0
+
+        # Is the player learning? Of temporarily paused due to test mode?
+        self._test_mode = test_mode
 
     def choose_action(self, options, save_game):
         return random.sample(options, k=1)[0]
@@ -213,16 +295,31 @@ class RandomPlayer():
     def new_game(self):
         self._tot_reward = 0
 
-    def set_state(self, state):
+    def set_state(self, game_x_list, game_y_list, turn, is_tagger):
+        pass
+
+    def update_reward_store(self):
+        self._reward_store.append(float(self._tot_reward))
+
+    def add_rewards_to_tensorboard(self, turn_count):
         pass
 
     def update_epsilon(self):
         pass
 
+    def set_sample(self, choice, reward):
+        pass
+
+    def update_sample(self, options):
+        pass
+
+    def finalize_sample_buffer(self):
+        pass
+
     def add_sample(self):
         pass
 
-    def learn_by_replay(self):
+    def learn_by_replay(self, batch_size):
         pass
 
     def reload(self):
@@ -232,7 +329,7 @@ class RandomPlayer():
 # Player
 class StillPlayer():
 
-    def __init__(self, name):
+    def __init__(self, name, test_mode=True):
 
         # Identifying variables
         self._name = name
@@ -245,6 +342,9 @@ class StillPlayer():
         # State variables
         self._reward = 0
         self._tot_reward = 0
+
+        # Is the player learning? Of temporarily paused due to test mode?
+        self._test_mode = test_mode
 
     def choose_action(self, options, save_game):
         return 8
@@ -260,16 +360,31 @@ class StillPlayer():
     def new_game(self):
         self._tot_reward = 0
 
-    def set_state(self, state):
+    def set_state(self, game_x_list, game_y_list, turn, is_tagger):
+        pass
+
+    def update_reward_store(self):
+        self._reward_store.append(float(self._tot_reward))
+
+    def add_rewards_to_tensorboard(self, turn_count):
         pass
 
     def update_epsilon(self):
         pass
 
+    def set_sample(self, choice, reward):
+        pass
+
+    def update_sample(self, options):
+        pass
+
+    def finalize_sample_buffer(self):
+        pass
+
     def add_sample(self):
         pass
 
-    def learn_by_replay(self):
+    def learn_by_replay(self, batch_size):
         pass
 
     def reload(self):
