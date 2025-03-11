@@ -4,7 +4,7 @@ import datetime
 from experiment import Experiment
 
 # Experiment
-experiment = "/experiment-20250311-1926"#sys.argv  [0]
+experiment = "new"#sys.argv  [0]
 if experiment == "new":
     experiment = "/experiment-"+datetime.datetime.now().strftime("%Y%m%d-%H%M")
 experiment = Experiment(experiment)

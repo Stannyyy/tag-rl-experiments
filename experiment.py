@@ -100,8 +100,8 @@ class Experiment():
                 # If state exists, load state
                 if os.path.exists(p._state_path):
                     arn = pickle.load(open(p._state_path, "rb", -1))
-                    p = arn.modertr.players[0]
-                    p.reload()
+                    for player in arn.modertr.players:
+                        player.reload()
                 else:
                     mdrtr = Moderator([p, p], experiment=self._experiment)
                     arn = Arena(mdrtr, training_phase="part3")
