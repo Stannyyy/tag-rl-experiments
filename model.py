@@ -88,29 +88,6 @@ class Model(Config):
                     tfbare.summary.histogram(f'Layer_{i}_biases', biases, step = self._summary_params_step)
                 self._summary_params_step += 1
 
-
-    def mutate(self, model):
-
-        # For each layer, copy model weights and mutate with chanceOfMutation
-        new_layers = []
-        for l in range(len(model.get_weights())):
-
-            # Retrieve weights
-            layer = model.get_weights()[l]
-
-            # Mutate weights
-            random_mutation_probs = np.random.rand(*layer.shape)
-            random_mutation_probs = np.where(random_mutation_probs < self.chanceOfMutation,
-                                             (np.random.rand() - 0.5) / 2, 0)
-            new_layer = layer + random_mutation_probs
-            new_layers += [new_layer]
-
-        # Clone model 1 and set new, mutated weights
-        copy = tf.models.clone_model(model)
-        copy.set_weights(new_layers)
-
-        return copy
-
     def save_checkpoint(self, model, cnt, name, training_phase):
 
         # Save weights

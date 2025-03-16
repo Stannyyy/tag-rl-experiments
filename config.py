@@ -6,8 +6,7 @@ class Config:
                  gridSize = 10,
                  numPlayers = 2, numTaggers = 1,
                  renderSpeed = 0.3, createVideo = True,
-                 numEpisodes = 10001, numEpisodesBeforePrint = 100, minLoss = 1, numGamesShown = 100,
-                 chanceOfMutation = 0.01
+                 numEpisodes = 10000, numEpisodesBeforePrint = 100, minLoss = 1, numGamesShown = 100
                 ):
 
         # Model config
@@ -32,6 +31,3 @@ class Config:
         self.renderSpeed = renderSpeed  # Players move every ~ seconds in rendering window
         self.numGamesShown = numGamesShown
         self.createVideo = createVideo
-        
-        # Evolution config
-        self.chanceOfMutation = chanceOfMutation

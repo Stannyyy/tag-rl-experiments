@@ -47,12 +47,12 @@ class Experiment():
                 if not os.path.exists(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}'):
                     os.mkdir(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}')
     def continue_experiment(self):
-        total = self.numEpisodes/self.numEpisodesBeforePrint
+        total = int(self.numEpisodes/self.numEpisodesBeforePrint)
         for p in self._players:
             # Part 1 - Against still player
             part1_done = len(os.listdir(os.getcwd()+f'{self._experiment}/checkpoints/{p._name}/part1'))
             if part1_done == total:
-                continue
+                pass
             else:
 
                 # If state exists, load state
@@ -73,7 +73,7 @@ class Experiment():
             p.set_eps(p.minEpsilon)
             part2_done = len(os.listdir(os.getcwd() + f'{self._experiment}/checkpoints/{p._name}/part2'))
             if part2_done == total:
-                continue
+                pass
             else:
 
                 # If state exists, load state
@@ -94,7 +94,7 @@ class Experiment():
             p.set_eps(p.minEpsilon)
             part3_done = len(os.listdir(os.getcwd() + f'{self._experiment}/checkpoints/{p._name}/part3'))
             if part3_done == total:
-                continue
+                pass
             else:
 
                 # If state exists, load state

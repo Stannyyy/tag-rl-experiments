@@ -30,7 +30,7 @@ class Arena(Config):
 
                 # Print progress
                 self.end = time.time()
-                print('Round', self.cnt, 'out of', self.numEpisodes-1, round(self.end - self.stt), 'sec elapsed')
+                print('Round', self.cnt, 'out of', self.numEpisodes, round(self.end - self.stt), 'sec elapsed')
 
                 for player in self.modertr.players:
                     if player.isRandom:
@@ -57,7 +57,6 @@ class Arena(Config):
                 # Save models
                 for p in self.modertr.players:
                     if p.isRandom == False:
-                        self.progress_bar(task='Saving checkpoint')
                         if p._test_mode == False:
                             p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
 
