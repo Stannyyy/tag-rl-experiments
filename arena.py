@@ -5,6 +5,7 @@ from config import Config
 import os
 import pickle
 import tensorflow as tfbare
+import datetime
 
 # Arena
 class Arena(Config):
@@ -19,9 +20,11 @@ class Arena(Config):
         self.loss_check = True
         self.modertr = modertr
         self.training_phase = training_phase
+        self.start_time = datetime.datetime.now()
+        self.total_time = 0
 
     def play_and_learn(self):
-        
+        self.start_stopwatch()
         # Loop for number of episodes
         while self.cnt < self.numEpisodes:
             self.cnt += 1
@@ -72,9 +75,20 @@ class Arena(Config):
 
             # Play episode!
             self.modertr.play(False)
+            
+            # Stop the stopwatch
+            self.stop_stopwatch()
 
         # End arena
         self.cnt += 1
+    
+    def start_stopwatch(self):
+        self.start_time = datetime.datetime.now()
+        
+    def stop_stopwatch(self):
+        episode_time = (datetime.datetime.now() - self.start_time).seconds
+        self.total_time += episode_time
+        self.start_stopwatch()
 
     def progress_bar(self, task, based_on='episodes', i=100):
         if based_on == 'episodes':

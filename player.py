@@ -198,6 +198,9 @@ class Player(Model):
         x = np.zeros((len(batch), self.numStates))
         y = np.zeros((len(batch), self.numActions))
 
+        # Set up reward array
+        z = np.zeros((len(batch), self.numActions))
+
         # Now loop over batch
         for i, b in enumerate(batch):
 
@@ -218,10 +221,13 @@ class Player(Model):
 
             x[i] = state
             y[i] = corrected_q
+            z[i] = reward
 
         # Add q to tensorboard
         with self._summary_writer.as_default():
             tfbare.summary.scalar('Q', np.mean(y), step=self._learningSteps)
+            tfbare.summary.scalar('abs-Q-end-state', np.mean(np.abs(y[np.abs(z) > 50])), step=self._learningSteps)
+            tfbare.summary.scalar('abs-Q-non-end-state', np.mean(np.abs(y[np.abs(z) < 50])), step=self._learningSteps)
             self._learningSteps += 1
 
         self.train_batch(x, y)

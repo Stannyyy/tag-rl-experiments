@@ -108,7 +108,8 @@ class Moderator(Config):
             self._game.record(game_name)
 
         # All players learn!
-        for player in self._players:
+        unique_players = list(set(self._players))
+        for player in unique_players:
 
             # Add rewards to reward store
             player.update_reward_store()
@@ -124,7 +125,7 @@ class Moderator(Config):
             player.finalize_sample_buffer()
 
             # Learn!
-            player.learn_by_replay(self.batchSize)
+            player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))
 
             # Reset player
             player._tot_reward = 0

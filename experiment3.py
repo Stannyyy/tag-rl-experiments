@@ -49,7 +49,6 @@ class Experiment():
     def continue_experiment(self):
         total = int(self.numEpisodes/self.numEpisodesBeforePrint)
         for p in self._players:
-            # Part 1 - Against still player
             part1_done = len(os.listdir(os.getcwd()+f'{self._experiment}/checkpoints/{p._name}/part1'))
             if part1_done == total:
                 pass
@@ -61,49 +60,7 @@ class Experiment():
                     p = arn.modertr.players[0]
                     p.reload()
                 else:
-                    ps = StillPlayer(name='Stable Sef')
-                    mdrtr = Moderator([p, ps], experiment=self._experiment)
-                    arn = Arena(mdrtr, training_phase="part1")
-
-                arn.play_and_learn()
-
-            # Part 2 - Against random player
-            p.reload()
-            p.new_part("part1", "part2")
-            p.set_eps(p.maxEpsilon)
-            part2_done = len(os.listdir(os.getcwd() + f'{self._experiment}/checkpoints/{p._name}/part2'))
-            if part2_done == total:
-                pass
-            else:
-
-                # If state exists, load state
-                if os.path.exists(p._state_path):
-                    arn = pickle.load(open(p._state_path, "rb", -1))
-                    p = arn.modertr.players[0]
-                    p.reload()
-                else:
-                    pr = RandomPlayer(name='Randy Rado')
-                    mdrtr = Moderator([p, pr], experiment=self._experiment)
-                    arn = Arena(mdrtr, training_phase="part2")
-
-                arn.play_and_learn()
-
-            # Part 3 - against oneself
-            p.reload()
-            p.new_part("part2", "part3")
-            p.set_eps(p.maxEpsilon)
-            part3_done = len(os.listdir(os.getcwd() + f'{self._experiment}/checkpoints/{p._name}/part3'))
-            if part3_done == total:
-                pass
-            else:
-
-                # If state exists, load state
-                if os.path.exists(p._state_path):
-                    arn = pickle.load(open(p._state_path, "rb", -1))
-                    for player in arn.modertr.players:
-                        player.reload()
-                else:
                     mdrtr = Moderator([p, p], experiment=self._experiment)
-                    arn = Arena(mdrtr, training_phase="part3")
+                    arn = Arena(mdrtr, training_phase="part1")
 
                 arn.play_and_learn()
