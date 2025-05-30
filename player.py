@@ -17,10 +17,11 @@ import os
 class Player(Model):
 
     def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
-        learningRate = 0.001, layers = [100,100,100], render=False, justLike=None, test_mode=False):
+                 learningRate = 0.001, layers = [100,100,100], addLSTM = False, sequenceLength = 1,
+                 render=False, justLike=None, testMode=False):
 
         # Import model
-        Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers)
+        Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers, addLSTM=addLSTM)
 
         # Identifying variables
         self._name = name if justLike is None else justLike._name + name
@@ -31,6 +32,7 @@ class Player(Model):
         self._eps = self.maxEpsilon if justLike is None else justLike._eps
         self._bootstrapValueEpsilon = bootstrapValueEpsilon  # formerly lambda
         self._discountFactor = discountFactor  # formerly gamma
+        self._sequence_length = sequenceLength
 
         # Experience variables (carrying over using justLike)
         self._steps = 0 if justLike is None else justLike._steps
@@ -54,7 +56,7 @@ class Player(Model):
         self._tot_reward = 0
 
         # Is the player learning? Of temporarily paused due to test mode?
-        self._test_mode = test_mode
+        self._test_mode = testMode
 
         # Save intermittant folders
         self._state_path = os.getcwd() + experiment + "/state/part1-" + self._name.replace(" ","") + ".pickle"
@@ -74,7 +76,10 @@ class Player(Model):
         if (chance_value < self._eps) and (save_game == False):
             choice = random.sample(options, k=1)[0]
         else:
-            prediction = self.predict_one(self._state)
+            if self._add_LSTM:
+                prediction = self.predict_one([s[0] for s in self._samples[-4:]] + [self._state])
+            else:
+                prediction = self.predict_one([self._state])
             prediction = [p if i in options else -np.inf for i, p in enumerate(prediction)]
             choice = np.argmax(prediction)
         return choice
@@ -184,28 +189,56 @@ class Player(Model):
             return 0
 
         # Make random batch
-        batch = random.sample(self._samples, k=self.batchSize)
+        selection = random.choices(range(len(self._samples)-self._sequence_length), k=self.batchSize)
+        if self._add_LSTM:
+            batch = []
+            while len(batch) < self.batchSize:
+                for i in selection:
+                    samples_i = []
+                    add_i = 0
+                    compare_4 = self._samples[i][0][4]
+                    compare_5 = self._samples[i][0][5]
+                    while len(samples_i) < self._sequence_length:
+                        if len(self._samples ) == (i+add_i):
+                            print('check')
+                        if (compare_4 == self._samples[i+add_i][0][4]) & (compare_5 == self._samples[i+add_i][0][5]):
+                            if i+add_i >= (len(self.samples)-1):
+                                break
+                            if self._samples[i+add_i][4] is None:
+                                if len(samples_i) != (self._sequence_length - 1):
+                                    break
+                            samples_i += [self._samples[i+add_i]]
+                        add_i +=1
+                    if len(samples_i) == self._sequence_length:
+                        batch += [samples_i]
+                    else:
+                        continue
+                selection = random.choices(range(len(self._samples) - self._sequence_length), k=self.batchSize-len(batch))
+        else:
+            batch = [[self._samples[i]] for i in selection]
 
         # Predict Q(s,a) given the batch of states
-        states = np.array([val[0] for val in batch])
+        states = np.array([val[0] for seq in batch for val in seq])
+        states = states.reshape((self.batchSize, self._sequence_length, self.numStates))
         q_s_a = self.predict_batch(states)
 
         # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
-        next_states = np.array([(np.zeros(self.numStates) if val[3] is None else val[3]) for val in batch])
+        next_states = np.array([(np.zeros(self.numStates) if val[3] is None else val[3]) for seq in batch for val in seq])
+        next_states = next_states.reshape((self.batchSize, self._sequence_length, self.numStates))
         q_s_a_d = self.predict_batch(next_states)
 
         # Set up training arrays
-        x = np.zeros((len(batch), self.numStates))
-        y = np.zeros((len(batch), self.numActions))
+        x = np.zeros((self.batchSize, self._sequence_length, self.numStates))
+        y = np.zeros((self.batchSize, self.numActions))
 
         # Set up reward array
-        z = np.zeros((len(batch), self.numActions))
+        z = np.zeros((self.batchSize, self.numActions))
 
         # Now loop over batch
         for i, b in enumerate(batch):
 
             # Extract sample
-            state, action, reward, next_state, options = b[0], b[1], b[2], b[3], b[4]
+            state, action, reward, next_state, options = b[-1][0], b[-1][1], b[-1][2], b[-1][3], b[-1][4]
 
             # Get the corrected q values for all actions in state
             corrected_q = q_s_a[i]
@@ -219,7 +252,7 @@ class Player(Model):
 
                 corrected_q[action] = reward + self._discountFactor * prediction_next_state
 
-            x[i] = state
+            x[i,:] = [x[0] for x in b]
             y[i] = corrected_q
             z[i] = reward
 
@@ -257,6 +290,7 @@ class Player(Model):
 
     def reload(self):
         self.define_model()
+        self.model.build(input_shape=(None, self._sequence_length, self.numStates))
         checkpoints = os.listdir(self._checkpoint_path)
         checkpoints.sort()
         self.load_checkpoint(self._checkpoint_path + checkpoints[-1])

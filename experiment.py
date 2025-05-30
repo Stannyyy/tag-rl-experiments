@@ -15,18 +15,22 @@ class Experiment():
         self._experiment = experiment
 
         # Player definition
-        p00 = Player(experiment, name='Pietje Puk')
-        p01 = Player(experiment, name='Liesje Lot', bootstrapValueEpsilon=0.0001)
-        p02 = Player(experiment, name='Naima Nima', bootstrapValueEpsilon=0.01)
-        p03 = Player(experiment, name='Samir Smit', layers=[25, 25, 25])
-        p04 = Player(experiment, name='Biesje Bos', layers=[1000, 1000, 1000])
-        p05 = Player(experiment, name='Diego Delo', layers=[100, 100])
-        p06 = Player(experiment, name='Arie Aaron', layers=[100, 100, 100, 100])
-        p07 = Player(experiment, name='Fatima Flo', learningRate=0.01)
-        p08 = Player(experiment, name='Omari Oost', learningRate=0.0001)
-        p09 = Player(experiment, name='Lida Leeuw', discountFactor=0.995)
-        p10 = Player(experiment, name='Kim Klasen', discountFactor=0.95)
-        self._players = [p00, p01, p02, p03, p04, p05, p06, p07, p08, p09, p10]
+        p00 = Player(experiment, name='Pietje Puk', addLSTM=False)
+        p01 = Player(experiment, name='Pietje Puk with memory', addLSTM=True, sequenceLength=5)
+        p02 = Player(experiment, name='Pietje Puk with very short memory', addLSTM=True, sequenceLength=1)
+        self._players = [p01, p00, p02]
+        # p00 = Player(experiment, name='Pietje Puk')
+        # p01 = Player(experiment, name='Liesje Lot', bootstrapValueEpsilon=0.0001)
+        # p02 = Player(experiment, name='Naima Nima', bootstrapValueEpsilon=0.01)
+        # p03 = Player(experiment, name='Samir Smit', layers=[25, 25, 25])
+        # p04 = Player(experiment, name='Biesje Bos', layers=[1000, 1000, 1000])
+        # p05 = Player(experiment, name='Diego Delo', layers=[100, 100])
+        # p06 = Player(experiment, name='Arie Aaron', layers=[100, 100, 100, 100])
+        # p07 = Player(experiment, name='Fatima Flo', learningRate=0.01)
+        # p08 = Player(experiment, name='Omari Oost', learningRate=0.0001)
+        # p09 = Player(experiment, name='Lida Leeuw', discountFactor=0.995)
+        # p10 = Player(experiment, name='Kim Klasen', discountFactor=0.95)
+        # self._players = [p00, p01, p02, p03, p04, p05, p06, p07, p08, p09, p10]
 
         # Initialize results paths
         if not os.path.exists(os.getcwd() + experiment):

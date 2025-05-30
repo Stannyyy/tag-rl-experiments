@@ -14,7 +14,7 @@ from config import Config
 
 # Model game
 class Model(Config):
-    def __init__(self, experiment="defaultname", model=None, learningRate = 0.0001, layers = [50,50]):
+    def __init__(self, experiment="defaultname", model=None, learningRate = 0.0001, layers = [50,50], addLSTM = False):
 
         # Import config
         Config.__init__(self)
@@ -26,6 +26,7 @@ class Model(Config):
         self._learningRate = learningRate  # formerly alpha
         self._layers = layers
         self._model = model if model is not None else None
+        self._add_LSTM = addLSTM
 
         # Define the placeholders
         self._states = None
@@ -49,13 +50,11 @@ class Model(Config):
     def define_model(self):
         with tfbare.device('/gpu:0'):
             layers = []
-            for layer_nr in range(len(self._layers)):
-                if layer_nr == 0:
-                    layers += [tf.layers.Dense(self._layers[layer_nr],
-                                               activation=tf.layers.LeakyReLU(alpha=self._learningRate),
-                                               input_shape=[self.numStates])]
+            for layer_nr, layer in enumerate(self._layers):
+                if self._add_LSTM & (layer_nr == 0):
+                    layers += [tf.layers.LSTM(units=layer)]
                 else:
-                    layers += [tf.layers.Dense(self._layers[layer_nr],
+                    layers += [tf.layers.Dense(layer,
                                                activation=tf.layers.LeakyReLU(alpha=self._learningRate))]
             layers += [tf.layers.Dense(self.numActions, activation='linear')]
             model = tf.models.Sequential(layers)
@@ -63,11 +62,11 @@ class Model(Config):
         self._model = model
 
     def predict_one(self, state):
-        prediction = self._model.predict(np.array(state).reshape(1, self.numStates), verbose=0)[0]
+        prediction = self._model.predict(np.array(state).reshape(1, self._sequence_length, self.numStates), verbose=0)[0]
         return prediction
 
     def predict_batch(self, states):
-        return self._model.predict(states, verbose=0)
+        return self._model.predict(states.astype(float), verbose=0)
 
     def train_batch(self, x_batch, y_batch):
 
