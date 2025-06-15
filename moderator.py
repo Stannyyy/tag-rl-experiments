@@ -10,7 +10,7 @@ import random
 from config import Config
 from game import Game
 import datetime
-import tensorflow as tfbare
+import numpy as np
 
 # Moderate game
 class Moderator(Config):
@@ -44,7 +44,7 @@ class Moderator(Config):
             idx = 0
         self._turn = self._order_turns[idx]
         
-    def play(self, save_game = False):
+    def play(self, save_game = False, learn = True):
         
         # Initialize game
         self._turn_count = 0
@@ -70,17 +70,18 @@ class Moderator(Config):
             options = self._game.what_options(self._turn)
 
             # Set new player state
-            player.set_state(self._game._x_list,
-                             self._game._y_list,
-                             self._turn,
-                             self._game._taggers[self._turn])
+            if learn:
+                player.set_state(self._game._x_list,
+                                 self._game._y_list,
+                                 self._turn,
+                                 self._game._taggers[self._turn])
 
-            # Append next state and its options to sample (idx 3 and 4 of sample)
-            player.update_sample(options)
-            player.add_sample()
+                # Append next state and its options to sample (idx 3 and 4 of sample)
+                player.update_sample(options)
+                player.add_sample()
 
             # Make a move!
-            choice = player.choose_action(options, save_game)
+            choice = player.choose_action(options, save_game, self._game)
             reward = self._game.move(self._turn, choice)
             self._turn_count += 1
 
@@ -89,10 +90,14 @@ class Moderator(Config):
                 self._game.render()
 
             # Set new sample: state, choice, reward (idx 0, 1, 2 of sample)
-            player._reward = reward
-            player._tot_reward += reward
-            player.set_sample(choice, reward)
-            
+            if learn:
+                player._reward = reward
+                if self._game._taggers[self._turn]:
+                    player._tot_reward_tagger += reward
+                else:
+                    player._tot_reward_runner += reward
+                player.set_sample(choice, reward)
+
             # Write if save video
             if save_game:
                 text = self.write_video_text()
@@ -108,27 +113,29 @@ class Moderator(Config):
             self._game.record(game_name)
 
         # All players learn!
-        unique_players = list(set(self._players))
-        for player in unique_players:
+        if learn:
+            unique_players = list(set(self._players))
+            for player in unique_players:
 
-            # Add rewards to reward store
-            player.update_reward_store()
+                # Add rewards to reward store
+                player.update_reward_store()
 
-            # Add rewards to tensorboard
-            player.add_rewards_to_tensorboard(self._turn_count)
+                # Add rewards to tensorboard
+                player.add_rewards_to_tensorboard(self._turn_count)
 
-            # Append next state and its options to sample (idx 3 and 4 of sample)
-            player.update_sample(None)
+                # Append next state and its options to sample (idx 3 and 4 of sample)
+                player.update_sample(None)
 
-            # Finalize sample buffer
-            player.add_sample()
-            player.finalize_sample_buffer()
+                # Finalize sample buffer
+                player.add_sample()
+                player.finalize_sample_buffer()
 
-            # Learn!
-            player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))
+                # Learn!
+                player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))
 
-            # Reset player
-            player._tot_reward = 0
+                # Reset player
+                player._tot_reward_tagger = 0
+                player._tot_reward_runner = 0
 
         # Shuffle players for robustness
         self.shuffle_players()
@@ -137,9 +144,11 @@ class Moderator(Config):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \
                 'Reward player 0: ' + str(self._players[0]._reward) + '\n' + \
                 'Reward player 1: ' + str(self._players[1]._reward) + '\n' + \
-                'Total reward player 0: ' + str(self._players[0]._tot_reward) + '\n' + \
-                'Total reward player 1: ' + str(self._players[1]._tot_reward) + '\n' + \
-                'Turns: ' + str(self._turn_count)
+                'Total reward player 0 as tagger: ' + str(self._players[0]._tot_reward_tagger) + '\n' + \
+               'Total reward player 0 as runner: ' + str(self._players[0]._tot_reward_runner) + '\n' + \
+               'Total reward player 1 as tagger: ' + str(self._players[1]._tot_reward_tagger) + '\n' + \
+               'Total reward player 1 as runner: ' + str(self._players[1]._tot_reward_runner) + '\n' + \
+               'Turns: ' + str(self._turn_count)
         return text
 
     def describe_choice(self, choice):

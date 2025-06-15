@@ -4,6 +4,8 @@ from arena import Arena
 import os
 from config import Config
 import pickle
+import shutil
+from tensorboard import program
 
 class Experiment():
     def __init__(self, experiment):
@@ -41,6 +43,13 @@ class Experiment():
             os.mkdir(os.getcwd() + experiment + '/results')
         if not os.path.exists(os.getcwd() + experiment + '/state'):
             os.mkdir(os.getcwd() + experiment + '/state')
+        if not os.path.exists(os.getcwd() + experiment + '/code'):
+            os.mkdir(os.getcwd() + experiment + '/code')
+
+        # Add a version of the code to the code base
+        shutil.copy(__file__, os.getcwd() + experiment + '/code/experiment.py')
+        for file in ['arena.py', 'config.py', 'game.py', 'main.py', 'model.py', 'moderator.py', 'player.py']:
+            shutil.copy(os.getcwd() + '/' + file, os.getcwd() + experiment + '/code/' + file)
 
         # Initialize paths
         for player in self._players:
@@ -51,6 +60,8 @@ class Experiment():
                 if not os.path.exists(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}'):
                     os.mkdir(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}')
     def continue_experiment(self):
+        self.start_tensorboard()
+
         total = int(self.numEpisodes/self.numEpisodesBeforePrint)
         for p in self._players:
             # Part 1 - Against still player
@@ -111,3 +122,8 @@ class Experiment():
                     arn = Arena(mdrtr, training_phase="part3")
 
                 arn.play_and_learn()
+    def start_tensorboard(self):
+        tb = program.TensorBoard()
+        tb.configure(argv=[None, '--logdir', self._experiment[1:]+'/logs', '--port', '6006'])
+        url = tb.launch()
+        print(f"TensorBoard is running at {url}")

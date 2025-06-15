@@ -28,7 +28,8 @@ class Arena(Config):
         # Loop for number of episodes
         while self.cnt < self.numEpisodes:
             self.cnt += 1
-            self.progress_bar(task='Playing episode: ' + str(self.cnt))
+            if len(self.modertr.players[0]._losses) > 0:
+                self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.modertr.players[0]._losses[-1],2)))
             if (self.cnt % self.numEpisodesBeforePrint == 0) & (self.cnt != 0):
 
                 # Print progress
@@ -38,16 +39,19 @@ class Arena(Config):
                 for player in self.modertr.players:
                     if player.isRandom:
                         # Print progress
-                        av_rwd = np.array(player.reward_store[-100:]).mean().round(5)
-                        print(player.name + ' = av reward: ' + str(av_rwd))
+                        av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
+                        av_rwd_runner = np.array(player.reward_store_tagger[-100:]).mean().round(5)
+                        print(player.name + ' = av reward tagger: ' + str(
+                            av_rwd_tagger) + ', av reward runner: '+ str(av_rwd_runner))
 
                     else:
                         # Print progress
                         av_loss = np.array(player.losses[-100:]).mean().round(5)
-                        av_rwd = np.array(player.reward_store[-100:]).mean().round(5)
+                        av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
+                        av_rwd_runner = np.array(player.reward_store_runner[-100:]).mean().round(5)
                         eps = round(player.eps, 2)
-                        print(player.name + ' = av loss: ' + str(av_loss) + ', eps: ' + str(eps) + ', av reward: ' + str(
-                            av_rwd))
+                        print(player.name + ' = av loss: ' + str(av_loss) + ', eps: ' + str(eps) + ', av reward tagger: ' + str(
+                            av_rwd_tagger) + ', av reward runner: '+ str(av_rwd_runner))
 
                         # Check if learning done
                         if av_loss < 0.0001:
@@ -81,7 +85,24 @@ class Arena(Config):
 
         # End arena
         self.cnt += 1
-    
+
+    def competition(self, numEpisodes):
+
+        # Loop for number of episodes
+        cnt = 0
+        while cnt < numEpisodes:
+            cnt += 1
+            self.progress_bar(task=f'Playing episode: {str(cnt)} of {str(numEpisodes)}')
+
+            # Play episode!
+            self.modertr.play(create_video=True, learn=False)
+
+        # End arena
+        cnt += 1
+
+        # Return
+        print()
+
     def start_stopwatch(self):
         self.start_time = datetime.datetime.now()
         

@@ -2,7 +2,7 @@
 # Reinforcement learning model variables
 class Config:
     def __init__(self,
-                 maxEpsilon = 1, minEpsilon = 0.01, batchSize = 100, maxMemory = 5000,
+                 maxEpsilon = 1, minEpsilon = 0.01, batchSize = 1000, maxMemory = 5000,
                  gridSize = 10,
                  numPlayers = 2, numTaggers = 1,
                  renderSpeed = 0.3, createVideo = True,
@@ -21,6 +21,8 @@ class Config:
         self.numTaggers = numTaggers
         self.numStates = 2 * numPlayers + 2
         self.numActions = 9
+        self.stepPoints = 0.1 * gridSize
+        self.tagPoints = 5.1 * gridSize
         
         # Match config
         self.numEpisodes = numEpisodes

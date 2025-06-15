@@ -62,16 +62,20 @@ class Model(Config):
         self._model = model
 
     def predict_one(self, state):
-        prediction = self._model.predict(np.array(state).reshape(1, self._sequence_length, self.numStates), verbose=0)[0]
+        if self._add_LSTM:
+            state = np.array(state).reshape(1, self._sequence_length, self.numStates)
+        prediction = np.squeeze(self._model.predict(state, verbose=0))
         return prediction
 
     def predict_batch(self, states):
-        return self._model.predict(states.astype(float), verbose=0)
+        if self._add_LSTM:
+            states = states.astype(float)
+        return np.squeeze(self._model.predict(states, verbose=0))
 
     def train_batch(self, x_batch, y_batch):
 
         # Train batch
-        log = self._model.fit(x_batch, y_batch, epochs=1, verbose=0)
+        log = self._model.fit(x_batch, y_batch, epochs=5, verbose=0)
 
         # Add losses to log
         self._losses += log.history.get('loss')
@@ -80,8 +84,14 @@ class Model(Config):
         with self._summary_writer.as_default():
             tfbare.summary.scalar('Losses', log.history.get('loss')[0], step = self._summary_loss_step)
             self._summary_loss_step += 1
-            if len(self._losses) % 10000 == 0:
+            if len(self._losses) % 100 == 0:
                 for i, layer in enumerate(self._model.layers):
+                    if self._add_LSTM:
+                        if i == 0:
+                            for it, ly in enumerate(layer.get_weights()):
+                                tfbare.summary.histogram(f'LSTM_layer_{it}', ly, step = self._summary_params_step)
+
+                            continue
                     weights, biases = layer.get_weights()
                     tfbare.summary.histogram(f'Layer_{i}_weights', weights, step = self._summary_params_step)
                     tfbare.summary.histogram(f'Layer_{i}_biases', biases, step = self._summary_params_step)

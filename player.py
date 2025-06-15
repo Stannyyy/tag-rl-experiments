@@ -16,8 +16,8 @@ import os
 # Player
 class Player(Model):
 
-    def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.99,
-                 learningRate = 0.001, layers = [100,100,100], addLSTM = False, sequenceLength = 1,
+    def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.95,
+                 learningRate = 0.0001, layers = [100,100,100], addLSTM = False, sequenceLength = 1,
                  render=False, justLike=None, testMode=False):
 
         # Import model
@@ -49,11 +49,13 @@ class Player(Model):
         self._sample = []
 
         # Collection variables
-        self._reward_store = []
+        self._reward_store_tagger = []
+        self._reward_store_runner = []
 
         # State variables
         self._reward = 0
-        self._tot_reward = 0
+        self._tot_reward_tagger = 0
+        self._tot_reward_runner = 0
 
         # Is the player learning? Of temporarily paused due to test mode?
         self._test_mode = testMode
@@ -69,7 +71,7 @@ class Player(Model):
         self._summary_params_step = 0
         self._summary_reward_step = 0
 
-    def choose_action(self, options, save_game):
+    def choose_action(self, options, save_game, game=None):
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
@@ -77,11 +79,17 @@ class Player(Model):
             choice = random.sample(options, k=1)[0]
         else:
             if self._add_LSTM:
-                prediction = self.predict_one([s[0] for s in self._samples[-4:]] + [self._state])
+                ix_sequence_start = self._sequence_length*-1+1
+                if ix_sequence_start == 0:
+                    last_x_minus_1_samples = []
+                else:
+                    last_x_minus_1_samples = self._samples[(self._sequence_length * -1 + 1):]
+                prediction = self.predict_one([[s[0] for s in last_x_minus_1_samples] + [self._state]])
             else:
                 prediction = self.predict_one([self._state])
             prediction = [p if i in options else -np.inf for i, p in enumerate(prediction)]
             choice = np.argmax(prediction)
+
         return choice
 
     def get_name(self):
@@ -96,9 +104,13 @@ class Player(Model):
         return self._losses
     losses = property(get_losses)
 
-    def get_reward_store(self):
-        return self._reward_store
-    reward_store = property(get_reward_store)
+    def get_reward_store_tagger(self):
+        return self._reward_store_tagger
+    reward_store_tagger = property(get_reward_store_tagger)
+
+    def get_reward_store_runner(self):
+        return self._reward_store_runner
+    reward_store_runner = property(get_reward_store_runner)
 
     def get_eps(self):
         return self._eps
@@ -120,7 +132,7 @@ class Player(Model):
         return self._state
     state = property(get_state)
 
-    def set_state(self, game_x_list, game_y_list, turn, is_tagger):
+    def set_state(self, game_x_list, game_y_list, turn, is_tagger, turn_count=None):
         self._state = game_x_list + game_y_list + [turn, int(is_tagger)]
     state = property(set_state)
 
@@ -188,8 +200,79 @@ class Player(Model):
         if (self._test_mode) | (len(self._samples) <= batch_size):
             return 0
 
-        # Make random batch
+        # Make random batch, but always include some end states
+        batch = self.create_batch()
+
+        # Predict Q(s,a) given the batch of states
+        states = np.array([val[0] for seq in batch for val in seq])
+        if self._add_LSTM:
+            states = states.reshape((self.batchSize, self._sequence_length, self.numStates))
+        q_s_a = self.predict_batch(states)
+        q_s_a_uncorrected = np.copy(q_s_a)
+
+        # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
+        next_states = np.array([(np.zeros(self.numStates) if val[3] is None else val[3]) for seq in batch for val in seq])
+        if self._add_LSTM:
+            next_states = next_states.reshape((self.batchSize, self._sequence_length, self.numStates))
+        q_s_a_d = self.predict_batch(next_states)
+
+        # Set up training arrays
+        x = np.zeros((self.batchSize*self._sequence_length, self.numStates))
+        if self._add_LSTM:
+            x = x.reshape((self.batchSize, self._sequence_length, self.numStates))
+        y = np.zeros((self.batchSize, self.numActions))
+
+        # Set up reward array
+        z = np.zeros((self.batchSize))
+
+        # Now loop over batch
+        for i, b in enumerate(batch):
+
+            # Extract sample
+            state, action, reward, next_state, options = b[-1][0], b[-1][1], b[-1][2], b[-1][3], b[-1][4]
+
+            # Get the corrected q values for all actions in state
+            corrected_q = q_s_a[i]
+
+            # Clip corrected_q
+            corrected_q = [max(min(c*1.0, self.tagPoints*1.0), self.tagPoints*-1.0) for c in corrected_q]
+
+            # Update the q value for action
+            if next_state is None:
+                corrected_q[action] = reward
+            else:
+
+                prediction_next_state = np.amax(q_s_a_d[i][options])
+
+                corrected_q[action] = reward + self._discountFactor * prediction_next_state
+
+            x[i] = state
+            y[i] = corrected_q
+            z[i] = reward
+
+        self.train_batch(x, y)
+        self.update_epsilon()
+
+        # Add q to tensorboard
+        with self._summary_writer.as_default():
+            end_state = np.abs(z) >= (self.tagPoints - self.stepPoints*2)
+            if np.sum(end_state) > 0:
+                uncorrected_end_qs = q_s_a_uncorrected[end_state]
+                corrected_end_qs = y[end_state]
+                crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints*2)
+                q_crucial_action = uncorrected_end_qs[crucial_action]
+                q_alternative_action = uncorrected_end_qs[crucial_action==False]
+                tfbare.summary.scalar('abs-Q/tagged-state-of-crucial-action', np.mean(np.abs(q_crucial_action)), step=self._learningSteps)
+                tfbare.summary.scalar('abs-Q/tagged-state-of-alternative-action', np.mean(np.abs(q_alternative_action)), step=self._learningSteps)
+
+                tfbare.summary.scalar('abs-Q/diff-rel', np.mean(np.abs(q_crucial_action))/np.mean(np.abs(q_alternative_action)), step=self._learningSteps)
+                tfbare.summary.scalar('abs-Q/diff-abs', np.mean(np.abs(q_crucial_action)) - np.mean(np.abs(q_alternative_action)), step=self._learningSteps)
+            tfbare.summary.scalar('abs-Q/overall', np.mean(np.abs(q_s_a_uncorrected)), step=self._learningSteps)
+            self._learningSteps += 1
+
+    def create_batch(self):
         selection = random.choices(range(len(self._samples)-self._sequence_length), k=self.batchSize)
+
         if self._add_LSTM:
             batch = []
             while len(batch) < self.batchSize:
@@ -199,10 +282,8 @@ class Player(Model):
                     compare_4 = self._samples[i][0][4]
                     compare_5 = self._samples[i][0][5]
                     while len(samples_i) < self._sequence_length:
-                        if len(self._samples ) == (i+add_i):
-                            print('check')
                         if (compare_4 == self._samples[i+add_i][0][4]) & (compare_5 == self._samples[i+add_i][0][5]):
-                            if i+add_i >= (len(self.samples)-1):
+                            if i+add_i >= (len(self._samples)-1):
                                 break
                             if self._samples[i+add_i][4] is None:
                                 if len(samples_i) != (self._sequence_length - 1):
@@ -216,58 +297,31 @@ class Player(Model):
                 selection = random.choices(range(len(self._samples) - self._sequence_length), k=self.batchSize-len(batch))
         else:
             batch = [[self._samples[i]] for i in selection]
+        return batch
 
-        # Predict Q(s,a) given the batch of states
-        states = np.array([val[0] for seq in batch for val in seq])
-        states = states.reshape((self.batchSize, self._sequence_length, self.numStates))
-        q_s_a = self.predict_batch(states)
-
-        # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
-        next_states = np.array([(np.zeros(self.numStates) if val[3] is None else val[3]) for seq in batch for val in seq])
-        next_states = next_states.reshape((self.batchSize, self._sequence_length, self.numStates))
-        q_s_a_d = self.predict_batch(next_states)
-
-        # Set up training arrays
-        x = np.zeros((self.batchSize, self._sequence_length, self.numStates))
-        y = np.zeros((self.batchSize, self.numActions))
-
-        # Set up reward array
-        z = np.zeros((self.batchSize, self.numActions))
-
-        # Now loop over batch
-        for i, b in enumerate(batch):
-
-            # Extract sample
-            state, action, reward, next_state, options = b[-1][0], b[-1][1], b[-1][2], b[-1][3], b[-1][4]
-
-            # Get the corrected q values for all actions in state
-            corrected_q = q_s_a[i]
-
-            # Update the q value for action
-            if next_state is None:
-                corrected_q[action] = reward
+    def show_q_in_state(self, game):
+        if self._add_LSTM:
+            ix_sequence_start = self._sequence_length * -1 + 1
+            if ix_sequence_start == 0:
+                last_x_minus_1_samples = []
             else:
+                last_x_minus_1_samples = self._samples[(self._sequence_length * -1 + 1):]
+            prediction = self.predict_one([[np.array(s[0]) for s in last_x_minus_1_samples] + [self._state]])
+        else:
+            prediction = self.predict_one([self._state])
 
-                prediction_next_state = np.amax(q_s_a_d[i][options])
-
-                corrected_q[action] = reward + self._discountFactor * prediction_next_state
-
-            x[i,:] = [x[0] for x in b]
-            y[i] = corrected_q
-            z[i] = reward
-
-        # Add q to tensorboard
-        with self._summary_writer.as_default():
-            tfbare.summary.scalar('Q', np.mean(y), step=self._learningSteps)
-            tfbare.summary.scalar('abs-Q-end-state', np.mean(np.abs(y[np.abs(z) > 50])), step=self._learningSteps)
-            tfbare.summary.scalar('abs-Q-non-end-state', np.mean(np.abs(y[np.abs(z) < 50])), step=self._learningSteps)
-            self._learningSteps += 1
-
-        self.train_batch(x, y)
-        self.update_epsilon()
+        prediction = [np.round(p,1) for p in prediction]
+        game.render(prediction, self._state)
+        print('---')
+        print(self._state)
+        print('---')
+        for row in game._rendered:
+            print('|'.join(row))
+        print('---')
 
     def update_reward_store(self):
-        self._reward_store.append(float(self._tot_reward))
+        self._reward_store_tagger.append(float(self._tot_reward_tagger))
+        self._reward_store_runner.append(float(self._tot_reward_runner))
         
     def update_epsilon(self):
         self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(-self._bootstrapValueEpsilon * self._steps)
@@ -279,18 +333,27 @@ class Player(Model):
 
     def add_rewards_to_tensorboard(self, turn_count):
         with self._summary_writer.as_default():
-            tfbare.summary.scalar('Rewards', float(self._tot_reward),
+            if self._tot_reward_tagger != 0:
+                tfbare.summary.scalar('Rewards/tagger', float(self._tot_reward_tagger),
+                                      step=self._summary_reward_step)
+            if self._tot_reward_runner != 0:
+                tfbare.summary.scalar('Rewards/runner', float(self._tot_reward_runner),
                                   step=self._summary_reward_step)
-            tfbare.summary.scalar('TurnCount', turn_count,
+            tfbare.summary.scalar('Rewards/turnCount', turn_count,
                                   step=self._summary_reward_step)
             self._summary_reward_step += 1
 
     def new_game(self):
-        self._tot_reward = 0
+        self._tot_reward_tagger = 0
+        self._tot_reward_runner = 0
 
     def reload(self):
         self.define_model()
-        self.model.build(input_shape=(None, self._sequence_length, self.numStates))
+        if self._add_LSTM:
+            input_shape = (None, self._sequence_length, self.numStates)
+        else:
+            input_shape = (None, self.numStates)
+        self.model.build(input_shape=input_shape)
         checkpoints = os.listdir(self._checkpoint_path)
         checkpoints.sort()
         self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
@@ -312,34 +375,42 @@ class RandomPlayer():
         self.isStill = False
 
         # Collection variables
-        self._reward_store = []
+        self._reward_store_tagger = []
+        self._reward_store_runner = []
 
         # State variables
         self._reward = 0
-        self._tot_reward = 0
+        self._tot_reward_tagger = 0
+        self._tot_reward_runner = 0
 
         # Is the player learning? Of temporarily paused due to test mode?
         self._test_mode = test_mode
 
-    def choose_action(self, options, save_game):
+    def choose_action(self, options, save_game, game=None):
         return random.sample(options, k=1)[0]
 
     def get_name(self):
         return self._name
     name = property(get_name)
 
-    def get_reward_store(self):
-        return self._reward_store
-    reward_store = property(get_reward_store)
+    def get_reward_store_tagger(self):
+        return self._reward_store_tagger
+    reward_store_tagger = property(get_reward_store_tagger)
+
+    def get_reward_store_runner(self):
+        return self._reward_store_runner
+    reward_store_runner = property(get_reward_store_runner)
 
     def new_game(self):
-        self._tot_reward = 0
+        self._tot_reward_tagger = 0
+        self._tot_reward_runner = 0
 
-    def set_state(self, game_x_list, game_y_list, turn, is_tagger):
+    def set_state(self, game_x_list, game_y_list, turn, is_tagger, turn_count=None):
         pass
 
     def update_reward_store(self):
-        self._reward_store.append(float(self._tot_reward))
+        self._reward_store_tagger.append(float(self._tot_reward_tagger))
+        self._reward_store_runner.append(float(self._tot_reward_runner))
 
     def add_rewards_to_tensorboard(self, turn_count):
         pass
@@ -377,34 +448,42 @@ class StillPlayer():
         self.isStill = True
 
         # Collection variables
-        self._reward_store = []
+        self._reward_store_tagger = []
+        self._reward_store_runner = []
 
         # State variables
         self._reward = 0
-        self._tot_reward = 0
+        self._tot_reward_tagger = 0
+        self._tot_reward_runner = 0
 
         # Is the player learning? Of temporarily paused due to test mode?
         self._test_mode = test_mode
 
-    def choose_action(self, options, save_game):
+    def choose_action(self, options, save_game, game=None):
         return 8
 
     def get_name(self):
         return self._name
     name = property(get_name)
 
-    def get_reward_store(self):
-        return self._reward_store
-    reward_store = property(get_reward_store)
+    def get_reward_store_tagger(self):
+        return self._reward_store_tagger
+    reward_store_tagger = property(get_reward_store_tagger)
+
+    def get_reward_store_runner(self):
+        return self._reward_store_runner
+    reward_store_runner = property(get_reward_store_runner)
 
     def new_game(self):
-        self._tot_reward = 0
+        self._tot_reward_tagger = 0
+        self._tot_reward_runner = 0
 
-    def set_state(self, game_x_list, game_y_list, turn, is_tagger):
+    def set_state(self, game_x_list, game_y_list, turn, is_tagger, turn_count=None):
         pass
 
     def update_reward_store(self):
-        self._reward_store.append(float(self._tot_reward))
+        self._reward_store_tagger.append(float(self._tot_reward_tagger))
+        self._reward_store_runner.append(float(self._tot_reward_runner))
 
     def add_rewards_to_tensorboard(self, turn_count):
         pass

@@ -86,10 +86,8 @@ class Game(Config):
             
         options = [o for o in options if o != -1]
         return options
-    
-    def move(self, turn, choice):
-        x = self._x_list[turn]
-        y = self._y_list[turn]
+
+    def change_position(self, choice, x, y):
         if choice == 0: #up
             y = y - 1
         elif choice == 1: #down
@@ -113,14 +111,20 @@ class Game(Config):
         elif choice == 8: #dont move
             y = y
             x = x
-            
+        return x,y
+    
+    def move(self, turn, choice):
+        x = self._x_list[turn]
+        y = self._y_list[turn]
+        x, y = self.change_position(choice, x, y)
+
         self._y_list[turn] = y
         self._x_list[turn] = x
-        
-        reward = self.what_reward(turn)
+
+        reward = self.what_reward(turn, choice)
         return reward
 
-    def what_reward(self, turn):
+    def what_reward(self, turn, choice):
 
         # Get state of player whose turn it is
         is_tagger = self._taggers[turn]
@@ -130,11 +134,19 @@ class Game(Config):
         # Check if player is in the same spot as another player
         in_same_spot = [i for i in range(self.numPlayers) if (self._x_list[i] == x) & (self._y_list[i] == y) & (i != turn)]
 
-        # Usually, a tagger gets some punishment for each move, a runner gets some reward for each move
+        # A tagger gets some punishment for each move, a runner gets some reward for each move
         if is_tagger:
-            reward = -0.1 * self.gridSize
+            reward = -1 * self.stepPoints
         else:
-            reward = 0.1 * self.gridSize
+            reward = self.stepPoints
+
+        # Each player gets some punishment for moving
+        if choice in [0,1,2,3]:               # 0:up, 1:down, 2:left, 3:right,
+            reward -= self.stepPoints * 0.25
+        elif choice in [4,5,6,7]:             # 4:up left, 5:up right, 6:down left, 7:down right
+            reward -= self.stepPoints * 0.5
+        if choice == 8:                       # 8:dont move
+            reward -= 0
 
         # When the tagger caught the runner, the tagger gets a large reward and the runner a large punishment
         for caught in in_same_spot:
@@ -143,35 +155,54 @@ class Game(Config):
             
             if is_tagger != caught_is_tagger:
                 if is_tagger:
-                    reward = 5.1 * self.gridSize
+                    reward += self.tagPoints
                 else:
-                    reward = -5.1 * self.gridSize
+                    reward += -1 * self.tagPoints
 
                 self._ended = True
 
         return reward
 
-    def render(self):
+    def render(self, prediction=None, state=None):
 
-        playing_field = np.full(shape=(self.gridSize, self.gridSize), fill_value=' ')
-        for tagger in np.where(self._taggers)[0].tolist():
+        playing_field = np.full(shape=(self.gridSize, self.gridSize), fill_value='     ')
+        taggers = np.where(self._taggers)[0].tolist()
+        runners = np.where([t == False for t in self._taggers])[0].tolist()
+        if prediction is not None:
+            prediction = [str(p).ljust(5) for p in prediction]
+
+        for tagger in taggers:
             x_tagger = self._x_list[tagger]
             y_tagger = self._y_list[tagger]
-            playing_field[x_tagger, y_tagger] = 'x'
+            playing_field[x_tagger, y_tagger] = '  x  '
 
-        for runner in np.where([t == False for t in self._taggers])[0].tolist():
+            if (prediction is not None) & (state is not None):
+                if (tagger == state[4]):
+                    for i, c in enumerate(prediction):
+                        x, y = self.change_position(i, x_tagger, y_tagger)
+                        if (x in list(range(self.gridSize))) & (y in list(range(self.gridSize))):
+                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ","").ljust(5)
+
+        for runner in runners:
             x_runner = self._x_list[runner]
             y_runner = self._y_list[runner]
-            if playing_field[x_runner, y_runner] == 'x':
-                playing_field[x_runner, y_runner] = '%'
+            if playing_field[x_runner, y_runner] == '  x  ':
+                playing_field[x_runner, y_runner] = '  %  '
             else:
-                playing_field[x_runner, y_runner] = 'o'
+                playing_field[x_runner, y_runner] = ('  o  ' + playing_field[x_runner, y_runner]).strip().replace(" ","").ljust(5)
+
+            if (prediction is not None) & (state is not None):
+                if (runner == state[4]):
+                    for i, c in enumerate(prediction):
+                        x, y = self.change_position(i, x_runner, y_runner)
+                        if (x in list(range(self.gridSize))) & (y in list(range(self.gridSize))):
+                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ","").ljust(5)
 
         # print(playing_field.T)
         self._rendered = playing_field.T
     
     def extract_position(self, grid, symbol):
-        return [[x,y] for x in range(len(grid)) for y in range(len(grid[x])) if grid[x][y] == symbol]
+        return [[x,y] for x in range(len(grid)) for y in range(len(grid[x])) if symbol in grid[x][y]]
     
     def draw_position(self, draw, players, prev_players, color, 
                       cell_size, player_radius, step_size):
