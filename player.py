@@ -9,19 +9,22 @@ Created on Thu Oct 21 20:14:00 2021
 import random
 import numpy as np
 import math
-from model import Model
+from model import Model, ModelNextState
 import tensorflow as tfbare
 import os
 
 # Player
-class Player(Model):
+class Player(Model, ModelNextState):
 
     def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.95,
-                 learningRate = 0.0001, layers = [100,100,100], addLSTM = False, sequenceLength = 1,
-                 render=False, justLike=None, testMode=False):
+                 learningRate = 0.001, layers = [100,100,100], addLSTM = False, sequenceLength = 1,
+                 render=False, justLike=None, testMode=False, curiosity=False, curiosity_beta=0,
+                 maxEpsilon=None):
 
-        # Import model
+        # Import models
         Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers, addLSTM=addLSTM)
+        if curiosity:
+            ModelNextState.__init__(self)
 
         # Identifying variables
         self._name = name if justLike is None else justLike._name + name
@@ -40,6 +43,12 @@ class Player(Model):
         self._samples_count = 0
         self._sample_buffer = []
         self._learningSteps = 0
+
+        # Curiosity variables
+        self._curiosity = curiosity
+        self._curiosity_beta = curiosity_beta
+        if maxEpsilon is not None:
+            self.maxEpsilon = maxEpsilon
 
         # Render variables
         self._render = render
@@ -99,6 +108,10 @@ class Player(Model):
     def get_model(self):
         return self._model
     model = property(get_model)
+
+    def get_model_next_state(self):
+        return self._model_next_state
+    model_next_state = property(get_model_next_state)
 
     def get_losses(self):
         return self._losses
@@ -216,14 +229,20 @@ class Player(Model):
             next_states = next_states.reshape((self.batchSize, self._sequence_length, self.numStates))
         q_s_a_d = self.predict_batch(next_states)
 
-        # Set up training arrays
-        x = np.zeros((self.batchSize*self._sequence_length, self.numStates))
+        # Extract slices from batch
+        all_states = np.array([b[0][0] for b in batch])*1.0
+        all_next_states = np.array([None if b[0][0] is None else np.array(b[0][0]).astype(float) for b in batch])
         if self._add_LSTM:
-            x = x.reshape((self.batchSize, self._sequence_length, self.numStates))
-        y = np.zeros((self.batchSize, self.numActions))
+            all_states = all_states.reshape((self.batchSize, self._sequence_length, self.numStates))
+            all_next_states = all_next_states.reshape((self.batchSize, self._sequence_length, self.numStates))
+        all_rewards = np.array([b[0][2] for b in batch])*1.0
 
-        # Set up reward array
-        z = np.zeros((self.batchSize))
+        # Set up training arrays
+        corrected_qs = np.zeros((self.batchSize, self.numActions))
+
+        # Bulk predict next state
+        if self._curiosity:
+            predicted_next_state = self.predict_batch_next_state(all_states)
 
         # Now loop over batch
         for i, b in enumerate(batch):
@@ -242,23 +261,27 @@ class Player(Model):
                 corrected_q[action] = reward
             else:
 
-                prediction_next_state = np.amax(q_s_a_d[i][options])
+                # Curiosity bonus
+                if self._curiosity:
+                    curiosity_bonus = np.mean((predicted_next_state[i] - next_state) ** 2)
+                    reward += self._curiosity_beta * curiosity_bonus
 
+                prediction_next_state = np.amax(q_s_a_d[i][options])
                 corrected_q[action] = reward + self._discountFactor * prediction_next_state
 
-            x[i] = state
-            y[i] = corrected_q
-            z[i] = reward
+            corrected_qs[i] = corrected_q
 
-        self.train_batch(x, y)
+        self.train_batch(all_states, corrected_qs)
+        if self._curiosity:
+            self.train_batch_next_state(all_states, all_next_states)
         self.update_epsilon()
 
         # Add q to tensorboard
         with self._summary_writer.as_default():
-            end_state = np.abs(z) >= (self.tagPoints - self.stepPoints*2)
+            end_state = np.abs(all_rewards) >= (self.tagPoints - self.stepPoints*2)
             if np.sum(end_state) > 0:
                 uncorrected_end_qs = q_s_a_uncorrected[end_state]
-                corrected_end_qs = y[end_state]
+                corrected_end_qs = corrected_qs[end_state]
                 crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints*2)
                 q_crucial_action = uncorrected_end_qs[crucial_action]
                 q_alternative_action = uncorrected_end_qs[crucial_action==False]
@@ -320,8 +343,10 @@ class Player(Model):
         print('---')
 
     def update_reward_store(self):
-        self._reward_store_tagger.append(float(self._tot_reward_tagger))
-        self._reward_store_runner.append(float(self._tot_reward_runner))
+        if self._tot_reward_tagger != 0:
+            self._reward_store_tagger.append(float(self._tot_reward_tagger))
+        if self._tot_reward_runner != 0:
+            self._reward_store_runner.append(float(self._tot_reward_runner))
         
     def update_epsilon(self):
         self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(-self._bootstrapValueEpsilon * self._steps)
@@ -348,15 +373,23 @@ class Player(Model):
         self._tot_reward_runner = 0
 
     def reload(self):
-        self.define_model()
         if self._add_LSTM:
             input_shape = (None, self._sequence_length, self.numStates)
         else:
             input_shape = (None, self.numStates)
+
+        self.define_model()
         self.model.build(input_shape=input_shape)
-        checkpoints = os.listdir(self._checkpoint_path)
+        checkpoints = [p for p in os.listdir(self._checkpoint_path) if '-next-state' not in p]
         checkpoints.sort()
         self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
+
+        if self._curiosity:
+            self.define_model_next_state()
+            self.model_next_state.build(input_shape=input_shape)
+            checkpoints_next_state = [p for p in os.listdir(self._checkpoint_path) if '-next-state' in p]
+            checkpoints_next_state.sort()
+            self.load_checkpoint_next_state(self._checkpoint_path + checkpoints_next_state[-1])
         self._summary_writer = tfbare.summary.create_file_writer(self._log_path)
 
     def new_part(self, current_part, new_part):

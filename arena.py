@@ -42,7 +42,7 @@ class Arena(Config):
                         av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
                         av_rwd_runner = np.array(player.reward_store_tagger[-100:]).mean().round(5)
                         print(player.name + ' = av reward tagger: ' + str(
-                            av_rwd_tagger) + ', av reward runner: '+ str(av_rwd_runner))
+                            av_rwd_tagger) + ', av reward runner: ' + str(av_rwd_runner))
 
                     else:
                         # Print progress
@@ -51,7 +51,7 @@ class Arena(Config):
                         av_rwd_runner = np.array(player.reward_store_runner[-100:]).mean().round(5)
                         eps = round(player.eps, 2)
                         print(player.name + ' = av loss: ' + str(av_loss) + ', eps: ' + str(eps) + ', av reward tagger: ' + str(
-                            av_rwd_tagger) + ', av reward runner: '+ str(av_rwd_runner))
+                            av_rwd_tagger) + ', av reward runner: ' + str(av_rwd_runner))
 
                         # Check if learning done
                         if av_loss < 0.0001:
@@ -62,17 +62,7 @@ class Arena(Config):
                     self.modertr.play(self.createVideo)
 
                 # Save models
-                for p in self.modertr.players:
-                    if p.isRandom == False:
-                        if p._test_mode == False:
-                            p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
-
-                            # Save state
-                            p._model = 0
-                            p._summary_writer = ''
-                            with open(p._state_path, "wb") as file_:
-                                pickle.dump(self, file_, -1)
-                            p.reload()
+                self.save_status()
 
                 # Start new timer
                 self.stt = time.time()
@@ -86,22 +76,40 @@ class Arena(Config):
         # End arena
         self.cnt += 1
 
+    def save_status(self):
+        for p in self.modertr.players:
+            if p.isRandom == False:
+
+                # Save model
+                if p._test_mode == False:
+                    p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
+                    if p._curiosity:
+                        p.save_checkpoint_next_state(p.model_next_state, self.cnt, p.name, self.training_phase)
+
+                # Save status
+                p._model = 0
+                p._model_next_state = 0
+                p._summary_writer = ''
+                with open(p._state_path, "wb") as file_:
+                    pickle.dump(self, file_, -1)
+                p.reload()
+
     def competition(self, numEpisodes):
 
         # Loop for number of episodes
         cnt = 0
         while cnt < numEpisodes:
             cnt += 1
-            self.progress_bar(task=f'Playing episode: {str(cnt)} of {str(numEpisodes)}')
+            self.progress_bar(task=f'Playing episode: {str(cnt)} of {str(numEpisodes)}', based_on='i', i=cnt, total=numEpisodes)
 
             # Play episode!
-            self.modertr.play(create_video=True, learn=False)
+            if cnt <= 10:
+                self.modertr.play(save_game=True, learn=False)
+            else:
+                self.modertr.play(save_game=False, learn=False)
 
         # End arena
         cnt += 1
-
-        # Return
-        print()
 
     def start_stopwatch(self):
         self.start_time = datetime.datetime.now()
@@ -111,12 +119,13 @@ class Arena(Config):
         self.total_time += episode_time
         self.start_stopwatch()
 
-    def progress_bar(self, task, based_on='episodes', i=100):
+    def progress_bar(self, task, based_on='episodes', i=100, total=None):
         if based_on == 'episodes':
             total = self.numEpisodesBeforePrint
             percent = round(100 * (self.cnt % total / float(total)))
         elif based_on == 'i':
-            total = self.numEpisodesBeforePrint/10
+            if total is None:
+                total = self.numEpisodesBeforePrint/10
             percent = round(100 * (i % total / float(total)))
         if percent ==   0:
             percent = 100

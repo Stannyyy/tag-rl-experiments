@@ -37,6 +37,9 @@ class Moderator(Config):
     def shuffle_players(self):
         random.shuffle(self._players)
 
+    def alternate_players(self):
+        self._players.reverse()
+
     def next_turn(self):
         idx = self._order_turns.index(self._turn)
         idx += 1
@@ -70,12 +73,12 @@ class Moderator(Config):
             options = self._game.what_options(self._turn)
 
             # Set new player state
-            if learn:
-                player.set_state(self._game._x_list,
-                                 self._game._y_list,
-                                 self._turn,
-                                 self._game._taggers[self._turn])
+            player.set_state(self._game._x_list,
+                             self._game._y_list,
+                             self._turn,
+                             self._game._taggers[self._turn])
 
+            if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
                 player.update_sample(options)
                 player.add_sample()
@@ -90,12 +93,12 @@ class Moderator(Config):
                 self._game.render()
 
             # Set new sample: state, choice, reward (idx 0, 1, 2 of sample)
+            player._reward = reward
+            if self._game._taggers[self._turn]:
+                player._tot_reward_tagger += reward
+            else:
+                player._tot_reward_runner += reward
             if learn:
-                player._reward = reward
-                if self._game._taggers[self._turn]:
-                    player._tot_reward_tagger += reward
-                else:
-                    player._tot_reward_runner += reward
                 player.set_sample(choice, reward)
 
             # Write if save video
@@ -112,17 +115,17 @@ class Moderator(Config):
             game_name = ' is playing against '.join([p._name for p in self._players]) + ' on ' + datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
             self._game.record(game_name)
 
-        # All players learn!
-        if learn:
-            unique_players = list(set(self._players))
-            for player in unique_players:
+        # Update players
+        unique_players = list(set(self._players))
+        for player in unique_players:
 
-                # Add rewards to reward store
-                player.update_reward_store()
+            # Add rewards to reward store
+            player.update_reward_store()
 
-                # Add rewards to tensorboard
-                player.add_rewards_to_tensorboard(self._turn_count)
+            # Add rewards to tensorboard
+            player.add_rewards_to_tensorboard(self._turn_count)
 
+            if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
                 player.update_sample(None)
 
@@ -133,12 +136,15 @@ class Moderator(Config):
                 # Learn!
                 player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))
 
-                # Reset player
-                player._tot_reward_tagger = 0
-                player._tot_reward_runner = 0
+            # Reset player
+            player._tot_reward_tagger = 0
+            player._tot_reward_runner = 0
 
         # Shuffle players for robustness
-        self.shuffle_players()
+        if learn:
+            self.shuffle_players()
+        else:
+            self.alternate_players()
 
     def write_video_text(self):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \
