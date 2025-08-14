@@ -62,7 +62,7 @@ class Experiment():
 
         total = int(self.numEpisodes/self.numEpisodesBeforePrint)
         for p in self._players:
-            part1_done = len(os.listdir(os.getcwd()+f'{self._experiment}/checkpoints/{p._name}/part1'))
+            part1_done = len([f for f in os.listdir(os.getcwd()+f'{self._experiment}/checkpoints/{p._name}/part1') if '-next-state' not in f])
             if part1_done == total:
                 pass
             else:

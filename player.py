@@ -38,11 +38,10 @@ class Player(Model, ModelNextState):
         self._sequence_length = sequenceLength
 
         # Experience variables (carrying over using justLike)
-        self._steps = 0 if justLike is None else justLike._steps
+        self._step = 0 if justLike is None else justLike._step
         self._samples = [] if justLike is None else justLike._samples.copy()
         self._samples_count = 0
         self._sample_buffer = []
-        self._learningSteps = 0
 
         # Curiosity variables
         self._curiosity = curiosity
@@ -76,9 +75,7 @@ class Player(Model, ModelNextState):
 
         # Set up the tensorboard
         self._summary_writer = tfbare.summary.create_file_writer(self._log_path)
-        self._summary_loss_step = 0
-        self._summary_params_step = 0
-        self._summary_reward_step = 0
+        self._summary_writer_collection = []
 
     def choose_action(self, options, save_game, game=None):
 
@@ -100,6 +97,12 @@ class Player(Model, ModelNextState):
             choice = np.argmax(prediction)
 
         return choice
+
+    def summary_writer(self):
+        with self._summary_writer.as_default():
+            for s in self._summary_writer_collection:
+                tfbare.summary.scalar(s.get('name'), s.get('value'), step=s.get('step'))
+        self._summary_writer_collection = []
 
     def get_name(self):
         return self._name
@@ -148,6 +151,14 @@ class Player(Model, ModelNextState):
     def set_state(self, game_x_list, game_y_list, turn, is_tagger, turn_count=None):
         self._state = game_x_list + game_y_list + [turn, int(is_tagger)]
     state = property(set_state)
+
+    def get_step(self):
+        return self._step
+    step = property(get_step)
+
+    def set_step(self, step):
+        self._step = step
+    step = property(get_step, set_step)
 
     def get_sample(self):
         return self._sample
@@ -271,27 +282,58 @@ class Player(Model, ModelNextState):
 
             corrected_qs[i] = corrected_q
 
-        self.train_batch(all_states, corrected_qs)
+        summary_writer_collection_add = self.train_batch(all_states, corrected_qs, self._step)
+        self._summary_writer_collection += [summary_writer_collection_add]
         if self._curiosity:
-            self.train_batch_next_state(all_states, all_next_states)
+            summary_writer_collection_add = self.train_batch_next_state(all_states, all_next_states, self._step)
+            self._summary_writer_collection += [summary_writer_collection_add]
         self.update_epsilon()
 
         # Add q to tensorboard
-        with self._summary_writer.as_default():
-            end_state = np.abs(all_rewards) >= (self.tagPoints - self.stepPoints*2)
-            if np.sum(end_state) > 0:
-                uncorrected_end_qs = q_s_a_uncorrected[end_state]
-                corrected_end_qs = corrected_qs[end_state]
-                crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints*2)
-                q_crucial_action = uncorrected_end_qs[crucial_action]
-                q_alternative_action = uncorrected_end_qs[crucial_action==False]
-                tfbare.summary.scalar('abs-Q/tagged-state-of-crucial-action', np.mean(np.abs(q_crucial_action)), step=self._learningSteps)
-                tfbare.summary.scalar('abs-Q/tagged-state-of-alternative-action', np.mean(np.abs(q_alternative_action)), step=self._learningSteps)
-
-                tfbare.summary.scalar('abs-Q/diff-rel', np.mean(np.abs(q_crucial_action))/np.mean(np.abs(q_alternative_action)), step=self._learningSteps)
-                tfbare.summary.scalar('abs-Q/diff-abs', np.mean(np.abs(q_crucial_action)) - np.mean(np.abs(q_alternative_action)), step=self._learningSteps)
-            tfbare.summary.scalar('abs-Q/overall', np.mean(np.abs(q_s_a_uncorrected)), step=self._learningSteps)
-            self._learningSteps += 1
+        end_state = np.abs(all_rewards) >= (self.tagPoints - self.stepPoints*2)
+        self._summary_writer_collection += [
+            {"name": 'Q/overall',
+             "value": np.round(np.mean(np.abs(q_s_a_uncorrected)), 1),
+             "step": self._step}
+        ]
+        if np.sum(end_state) > 0:
+            uncorrected_end_qs = q_s_a_uncorrected[end_state]
+            corrected_end_qs = corrected_qs[end_state]
+            crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints*2)
+            q_crucial_action = uncorrected_end_qs[crucial_action]
+            q_alternative_action = uncorrected_end_qs[crucial_action==False]
+            self._summary_writer_collection += [
+                {
+                    "name": 'Q/tagged-state-of-crucial-action', 
+                    "value": np.round(np.mean(np.abs(q_crucial_action)), 1),
+                    "step": self._step
+                 },
+                {
+                    "name": 'Q/tagged-state-of-alternative-action',
+                    "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
+                    "step": self._step
+                },
+                {
+                    "name": 'Q/diff-rel',
+                    "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_alternative_action)), 1),
+                    "step": self._step
+                },
+                {
+                    "name": 'Q/diff-abs',
+                    "value": np.round(np.mean(np.abs(q_crucial_action)) - np.mean(np.abs(q_alternative_action)), 1),
+                    "step": self._step
+                },
+                {
+                    "name": 'Q/tagged-state-of-crucial-action-norm',
+                    "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_s_a_uncorrected)), 1),
+                    "step": self._step
+                },
+                {
+                    "name": 'Q/tagged-state-of-alternative-action-norm',
+                    "value": np.round(np.mean(np.abs(q_alternative_action)) / np.mean(np.abs(q_s_a_uncorrected)), 1),
+                    "step": self._step
+                },
+            ]
 
     def create_batch(self):
         selection = random.choices(range(len(self._samples)-self._sequence_length), k=self.batchSize)
@@ -349,24 +391,42 @@ class Player(Model, ModelNextState):
             self._reward_store_runner.append(float(self._tot_reward_runner))
         
     def update_epsilon(self):
-        self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(-self._bootstrapValueEpsilon * self._steps)
-        self._steps += 1
+        # Add epsilon to tensorboard
+        self._summary_writer_collection += [
+            {
+                "name": 'params/epsilon',
+                "value": np.round(self._eps, 3),
+                "step": self._step
+             }
+        ]
 
-        # Add losses to tensorboard
-        with self._summary_writer.as_default():
-            tfbare.summary.scalar('Epsilon', self._eps, step = self._steps)
+        # Update epsilon
+        self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(-self._bootstrapValueEpsilon * self._step)
 
     def add_rewards_to_tensorboard(self, turn_count):
-        with self._summary_writer.as_default():
-            if self._tot_reward_tagger != 0:
-                tfbare.summary.scalar('Rewards/tagger', float(self._tot_reward_tagger),
-                                      step=self._summary_reward_step)
-            if self._tot_reward_runner != 0:
-                tfbare.summary.scalar('Rewards/runner', float(self._tot_reward_runner),
-                                  step=self._summary_reward_step)
-            tfbare.summary.scalar('Rewards/turnCount', turn_count,
-                                  step=self._summary_reward_step)
-            self._summary_reward_step += 1
+        self._summary_writer_collection += [
+            {
+                "name": 'Rewards/turn_count',
+                "value": turn_count,
+                "step": self._step
+             }
+        ]
+        if self._tot_reward_tagger != 0:
+            self._summary_writer_collection += [
+                {
+                    "name": 'Rewards/tagger',
+                    "value": float(self._tot_reward_tagger),
+                    "step": self._step
+                }
+            ]
+        if self._tot_reward_runner != 0:
+            self._summary_writer_collection += [
+                {
+                    "name": 'Rewards/runner',
+                    "value": float(self._tot_reward_runner),
+                    "step": self._step
+                }
+            ]
 
     def new_game(self):
         self._tot_reward_tagger = 0
@@ -408,6 +468,7 @@ class RandomPlayer():
         self.isStill = False
 
         # Collection variables
+        self._step = 0
         self._reward_store_tagger = []
         self._reward_store_runner = []
 
@@ -469,6 +530,13 @@ class RandomPlayer():
     def reload(self):
         pass
 
+    def get_step(self):
+        return self._step
+    step = property(get_step)
+
+    def set_step(self, step):
+        self._step = step
+    step = property(get_step, set_step)
 
 # Player
 class StillPlayer():
@@ -486,6 +554,7 @@ class StillPlayer():
 
         # State variables
         self._reward = 0
+        self._step = 0
         self._tot_reward_tagger = 0
         self._tot_reward_runner = 0
 
@@ -541,3 +610,11 @@ class StillPlayer():
 
     def reload(self):
         pass
+
+    def get_step(self):
+        return self._step
+    step = property(get_step)
+
+    def set_step(self, step):
+        self._step = step
+    step = property(get_step, set_step)

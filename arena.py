@@ -30,6 +30,8 @@ class Arena(Config):
             self.cnt += 1
             if len(self.modertr.players[0]._losses) > 0:
                 self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.modertr.players[0]._losses[-1],2)))
+            for player in self.modertr.players:
+                player.step = self.cnt
             if (self.cnt % self.numEpisodesBeforePrint == 0) & (self.cnt != 0):
 
                 # Print progress
@@ -85,6 +87,7 @@ class Arena(Config):
                     p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
                     if p._curiosity:
                         p.save_checkpoint_next_state(p.model_next_state, self.cnt, p.name, self.training_phase)
+                p.summary_writer()
 
                 # Save status
                 p._model = 0
