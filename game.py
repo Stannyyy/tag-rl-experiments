@@ -28,7 +28,7 @@ class Game(Config):
         self._options = [0, 1, 2, 3,  # 0:up, 1:down, 2:left, 3:right,
                          4, 5, 6, 7,  # 4:up left, 5:up right, 6:down left, 7:down right
                          8]           # 8:dont move
-        self._ended = False
+        self._ended = 0
 
         # Initialize game
         self.init_random_game()
@@ -56,7 +56,7 @@ class Game(Config):
 
         if random.random() < .5:
             self._taggers = [t==False for t in self._taggers]
-        self._ended = False
+        self._ended = 0
     
     # Move options        
     def what_options(self, turn):
@@ -159,7 +159,7 @@ class Game(Config):
                 else:
                     reward += -1 * self.tagPoints
 
-                self._ended = True
+                self._ended += 1
 
         return reward
 

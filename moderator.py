@@ -63,7 +63,7 @@ class Moderator(Config):
             self._game.save(text, prefix=str(self._turn_count))
 
         # Start game
-        while self._game._ended == False:
+        while self._game._ended < self.numPlayers:
 
             # Determine next state
             self.next_turn()
@@ -83,9 +83,14 @@ class Moderator(Config):
                 player.update_sample(options)
                 player.add_sample()
 
-            # Make a move!
-            choice = player.choose_action(options, save_game, self._game)
+            # Make a move! Unless a tag has happened or the game has reached maximum turns
+            if self._game._ended > 0:
+                choice = 8
+            else:
+                choice = player.choose_action(options, save_game, self._game)
             reward = self._game.move(self._turn, choice)
+            if self._turn_count > (50 + self.numPlayers):
+                raise Exception("Game is stuck in non-ending state.")
             self._turn_count += 1
 
             # Render
@@ -108,7 +113,7 @@ class Moderator(Config):
 
             # Determine if game ended and determine next state
             if self._turn_count >= 50:
-                self._game._ended = True
+                self._game._ended += 1
 
         # Create video
         if save_game:
@@ -118,12 +123,6 @@ class Moderator(Config):
         # Update players
         unique_players = list(set(self._players))
         for player in unique_players:
-
-            # Add rewards to reward store
-            player.update_reward_store()
-
-            # Add rewards to tensorboard
-            player.add_rewards_to_tensorboard(self._turn_count)
 
             if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
@@ -135,6 +134,12 @@ class Moderator(Config):
 
                 # Learn!
                 player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))
+
+            # Add rewards to reward store
+            player.update_reward_store()
+
+            # Add rewards to tensorboard
+            player.add_rewards_to_tensorboard(self._turn_count)
 
             # Reset player
             player._tot_reward_tagger = 0
