@@ -59,18 +59,16 @@ class Moderator(Config):
         # Render
         if save_game:
             self._game.render()
-            text = self.write_video_text()
-            self._game.save(text, prefix=str(self._turn_count))
+            self._game.save(prefix=str(self._turn_count))
 
         # Start game
-        while self._game._ended < self.numPlayers:
+        game_not_over = True
+        while game_not_over:
 
             # Determine next state
             self.next_turn()
             player = self._players[self._turn]
-
-            # Get options for player
-            options = self._game.what_options(self._turn)
+            player.options = self._game.what_options(self._turn)
 
             # Set new player state
             player.set_state(self._game._x_list,
@@ -80,14 +78,14 @@ class Moderator(Config):
 
             if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
-                player.update_sample(options)
-                player.add_sample()
+                player.update_sample(player.options)
+                player.add_sample(self._game._tag_happened, game_not_over)
 
             # Make a move! Unless a tag has happened or the game has reached maximum turns
             if self._game._ended > 0:
                 choice = 8
             else:
-                choice = player.choose_action(options, save_game, self._game)
+                choice = player.choose_action(player.options, save_game)
             reward = self._game.move(self._turn, choice)
             if self._turn_count > (50 + self.numPlayers):
                 raise Exception("Game is stuck in non-ending state.")
@@ -108,12 +106,14 @@ class Moderator(Config):
 
             # Write if save video
             if save_game:
-                text = self.write_video_text()
-                self._game.save(text, prefix=str(self._turn_count+1))
+                self._game.save(prefix=str(self._turn_count+1))
 
             # Determine if game ended and determine next state
             if self._turn_count >= 50:
                 self._game._ended += 1
+                player.options = self._game.what_options(self._turn)
+
+            game_not_over = self._game._ended < self.numPlayers
 
         # Create video
         if save_game:
@@ -126,11 +126,14 @@ class Moderator(Config):
 
             if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
-                player.update_sample(None)
+                if self._game._tag_happened:
+                    player.update_sample(None)
+                else:
+                    player.update_sample(player.options)
 
                 # Finalize sample buffer
-                player.add_sample()
-                player.finalize_sample_buffer()
+                player.add_sample(self._game._tag_happened, game_not_over)
+                player.finalize_sample_buffer(self._game._tag_happened, game_not_over)
 
                 # Learn!
                 player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))

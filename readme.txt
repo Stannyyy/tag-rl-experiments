@@ -15,3 +15,11 @@ To activate the tensorboard (outside of PyCharm):
 - Open Powershell prompt from environment in Anaconda Navigator
 - cd to repo
 - tensorboard --logdir experiment-<date>-<time>/logs
+
+To run pytest
+- Run all tests: pytest
+- Verbose: pytest -vv
+- Stop on first failure: pytest -x
+- Filter by name/keyword: pytest -k "math and not slow" (mark by @pytest.mark.slow)
+- Run a specific file: pytest tests/test_sample.py
+- Run a specific test: pytest tests/test_sample.py::test_math_works

@@ -16,6 +16,7 @@ import os
 
 # Game
 class Game(Config):
+
     def __init__(self, experiment="defaultname"):
 
         # Import config
@@ -29,6 +30,7 @@ class Game(Config):
                          4, 5, 6, 7,  # 4:up left, 5:up right, 6:down left, 7:down right
                          8]           # 8:dont move
         self._ended = 0
+        self._tag_happened = False
 
         # Initialize game
         self.init_random_game()
@@ -38,28 +40,38 @@ class Game(Config):
         self._prev_rendered = ''
 
         # Initialize save
-        self.savePath = os.getcwd() + experiment + '/results/'
-    
+        self.savePath = os.path.join(os.getcwd(), experiment, 'results')
+
     def init_random_game(self):
+        """
+        Start randomized game
+        """
+
         self._x_list = [-1] * self.numPlayers
         self._y_list = [-1] * self.numPlayers
 
+        occupied = set()
         for i in range(self.numPlayers):
             while True:
-                x = int(np.floor(random.random()*self.gridSize))
-                y = int(np.floor(random.random()*self.gridSize))
-                check = [True for i in range(self.numPlayers) if (self._x_list[i] == x) & (self._y_list[i] == y)]
-                if len(check) == 0:
+                x = int(np.floor(random.random() * self.gridSize))
+                y = int(np.floor(random.random() * self.gridSize))
+                if (x, y) not in occupied:
                     self._x_list[i] = x
                     self._y_list[i] = y
+                    occupied.add((x, y))
                     break
 
-        if random.random() < .5:
-            self._taggers = [t==False for t in self._taggers]
+        if random.random() < 0.5:
+            self._taggers = [not t for t in self._taggers]
         self._ended = 0
-    
+        self._tag_happened = False
+
     # Move options        
     def what_options(self, turn):
+
+        """
+        Check what move options the player has
+        """
 
         # Get x and y position of the player whose turn it is
         x = self._x_list[turn]
@@ -83,37 +95,41 @@ class Game(Config):
             options[3] = -1
             options[5] = -1
             options[7] = -1
-            
+
         options = [o for o in options if o != -1]
         return options
 
     def change_position(self, choice, x, y):
-        if choice == 0: #up
-            y = y - 1
-        elif choice == 1: #down
-            y = y + 1
-        elif choice == 2: #left
-            x = x - 1
-        elif choice == 3: #right
-            x = x + 1
-        elif choice == 4: #up left
-            y = y - 1
-            x = x - 1
-        elif choice == 5: #up right
-            y = y - 1
-            x = x + 1
-        elif choice == 6: #down left
-            y = y + 1
-            x = x - 1
-        elif choice == 7: #down right
-            y = y + 1
-            x = x + 1
-        elif choice == 8: #dont move
-            y = y
-            x = x
-        return x,y
-    
+
+        """
+        Change the position of a player on the board
+        """
+
+        deltas = {
+            0: (0, -1),  # up
+            1: (0, 1),  # down
+            2: (-1, 0),  # left
+            3: (1, 0),  # right
+            4: (-1, -1),  # up left
+            5: (1, -1),  # up right
+            6: (-1, 1),  # down left
+            7: (1, 1),  # down right
+            8: (0, 0),  # don't move
+        }
+        dx, dy = deltas.get(choice, (0, 0))
+        return x + dx, y + dy
+
     def move(self, turn, choice):
+
+        """
+        Move player on the board and update game params
+        """
+
+        # Validate move choice
+        valid = self.what_options(turn)
+        if choice not in valid:
+            raise ValueError(f"Invalid move choice {choice} for turn {turn}. Valid: {valid}")
+
         x = self._x_list[turn]
         y = self._y_list[turn]
         x, y = self.change_position(choice, x, y)
@@ -126,13 +142,18 @@ class Game(Config):
 
     def what_reward(self, turn, choice):
 
+        """
+        Define what reward is associated with the choice of the player
+        """
+
         # Get state of player whose turn it is
         is_tagger = self._taggers[turn]
         x = self._x_list[turn]
         y = self._y_list[turn]
 
         # Check if player is in the same spot as another player
-        in_same_spot = [i for i in range(self.numPlayers) if (self._x_list[i] == x) & (self._y_list[i] == y) & (i != turn)]
+        in_same_spot = [i for i in range(self.numPlayers) if
+                        (self._x_list[i] == x) and (self._y_list[i] == y) and (i != turn)]
 
         # A tagger gets some punishment for each move, a runner gets some reward for each move
         if is_tagger:
@@ -141,30 +162,34 @@ class Game(Config):
             reward = self.stepPoints
 
         # Each player gets some punishment for moving
-        if choice in [0,1,2,3]:               # 0:up, 1:down, 2:left, 3:right,
+        if choice in [0, 1, 2, 3]:              # 0:up, 1:down, 2:left, 3:right,
             reward -= self.stepPoints * 0.25
-        elif choice in [4,5,6,7]:             # 4:up left, 5:up right, 6:down left, 7:down right
-            reward -= self.stepPoints * 0.5
-        if choice == 8:                       # 8:dont move
+        elif choice in [4, 5, 6, 7]:            # 4:up left, 5:up right, 6:down left, 7:down right
+            reward -= ((self.stepPoints * 0.25) ** 2 * 2) ** 0.5
+        if choice == 8:                         # 8:dont move
             reward -= 0
 
         # When the tagger caught the runner, the tagger gets a large reward and the runner a large punishment
+        self._tag_happened = False
         for caught in in_same_spot:
-
             caught_is_tagger = self._taggers[caught]
-            
             if is_tagger != caught_is_tagger:
                 if is_tagger:
                     reward += self.tagPoints
                 else:
-                    reward += -1 * self.tagPoints
-
+                    reward -= self.tagPoints
                 self._ended += 1
+                self._tag_happened = True
 
         return reward
 
     def render(self, prediction=None, state=None):
 
+        """
+        Render a game for debugging purposes
+        """
+
+        # Initialize field
         playing_field = np.full(shape=(self.gridSize, self.gridSize), fill_value='     ')
         taggers = np.where(self._taggers)[0].tolist()
         runners = np.where([t == False for t in self._taggers])[0].tolist()
@@ -176,12 +201,12 @@ class Game(Config):
             y_tagger = self._y_list[tagger]
             playing_field[x_tagger, y_tagger] = '  x  '
 
-            if (prediction is not None) & (state is not None):
-                if (tagger == state[4]):
+            if (prediction is not None) and (state is not None):
+                if tagger == state[4]:
                     for i, c in enumerate(prediction):
                         x, y = self.change_position(i, x_tagger, y_tagger)
-                        if (x in list(range(self.gridSize))) & (y in list(range(self.gridSize))):
-                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ","").ljust(5)
+                        if (0 <= x < self.gridSize) and (0 <= y < self.gridSize):
+                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(5)
 
         for runner in runners:
             x_runner = self._x_list[runner]
@@ -189,116 +214,338 @@ class Game(Config):
             if playing_field[x_runner, y_runner] == '  x  ':
                 playing_field[x_runner, y_runner] = '  %  '
             else:
-                playing_field[x_runner, y_runner] = ('  o  ' + playing_field[x_runner, y_runner]).strip().replace(" ","").ljust(5)
+                playing_field[x_runner, y_runner] = ('  o  ' +
+                                                     playing_field[x_runner, y_runner]
+                                                     ).strip().replace(" ", "").ljust(5)
 
-            if (prediction is not None) & (state is not None):
-                if (runner == state[4]):
+            if (prediction is not None) and (state is not None):
+                if runner == state[4]:
                     for i, c in enumerate(prediction):
                         x, y = self.change_position(i, x_runner, y_runner)
-                        if (x in list(range(self.gridSize))) & (y in list(range(self.gridSize))):
-                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ","").ljust(5)
+                        if (0 <= x < self.gridSize) and (0 <= y < self.gridSize):
+                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(5)
 
-        # print(playing_field.T)
         self._rendered = playing_field.T
-    
+
+        # If you need a display of the rendered field:
+        # print(self._rendered)
+
     def extract_position(self, grid, symbol):
+
+        """
+        Extract player position
+        """
+
         return [[x,y] for x in range(len(grid)) for y in range(len(grid[x])) if symbol in grid[x][y]]
-    
-    def draw_position(self, draw, players, prev_players, color, 
-                      cell_size, player_radius, step_size):
-        
-        for i in range(len(players)):
-            x = players[i][0]
-            y = players[i][1]
-            x_prev = prev_players[i][0]
-            y_prev = prev_players[i][1]
-            
+
+    def draw_cat(self, draw, players, prev_players, color,
+                 cell_size, player_radius, step_size, ear_ratio=0.8):
+        """
+        Draw a simple cat to represent the tagger
+        """
+        top_margin = 0
+        # Horizontal ellipse head (wider than tall)
+        face_rx = max(3, int(player_radius * 1.6))  # horizontal radius
+        face_ry = max(2, int(player_radius * 1.0))  # vertical radius
+
+        # Ear geometry
+        ear_size = max(2, int(max(face_rx, face_ry) * ear_ratio))
+        ear_base_offset_x = max(1, int(face_rx * 0.30))  # closer to center
+        apex_tilt = max(1, int(ear_size * 0.4))
+
+        # Whiskers
+        whisker_len = max(4, int(face_rx * 0.9))
+        whisker_spread = max(2, int(face_ry * 0.35))
+        whisker_width = 2
+        cheek_offset_x = max(2, int(face_rx * 0.55))  # where whiskers attach on cheeks
+        cheek_y_offset = max(0, int(face_ry * 0.05))  # slight offset from vertical center
+
+        for (x, y), _ in zip(players, prev_players):
+            # Draw only at the current position (no trail)
+            center_x = x * cell_size + cell_size // 2
+            center_y = y * cell_size + top_margin + cell_size // 2
+
+            # Head (horizontal ellipse)
+            draw.ellipse(
+                [
+                    center_x - face_rx,
+                    center_y - face_ry,
+                    center_x + face_rx,
+                    center_y + face_ry,
+                ],
+                fill=color,
+            )
+
+            # Ears base line lowered to overlap into the head
+            base_y = center_y - face_ry + max(1, int(face_ry * 0.28))
+
+            # Left ear (apex top-left)
+            left_base_cx = center_x - ear_base_offset_x
+            draw.polygon(
+                [
+                    (left_base_cx - ear_size // 2, base_y),         # left base
+                    (left_base_cx + ear_size // 2, base_y),         # right base
+                    (left_base_cx - apex_tilt, base_y - ear_size),  # apex tilted to top-left
+                ],
+                fill=color,
+            )
+
+            # Right ear (apex top-right)
+            right_base_cx = center_x + ear_base_offset_x
+            draw.polygon(
+                [
+                    (right_base_cx - ear_size // 2, base_y),
+                    (right_base_cx + ear_size // 2, base_y),
+                    (right_base_cx + apex_tilt, base_y - ear_size),  # apex tilted to top-right
+                ],
+                fill=color,
+            )
+
+            # Whiskers from cheeks (left and right)
+            cheek_y = center_y + cheek_y_offset
+            # Left cheek whiskers (extend to the left)
+            draw.line(
+                [(center_x - cheek_offset_x, cheek_y),
+                 (center_x - cheek_offset_x - whisker_len, cheek_y - whisker_spread)],
+                fill="grey", width=whisker_width,
+            )
+            draw.line(
+                [(center_x - cheek_offset_x, cheek_y),
+                 (center_x - cheek_offset_x - whisker_len, cheek_y)],
+                fill="grey", width=whisker_width,
+            )
+            draw.line(
+                [(center_x - cheek_offset_x, cheek_y),
+                 (center_x - cheek_offset_x - whisker_len, cheek_y + whisker_spread)],
+                fill="grey", width=whisker_width,
+            )
+            # Right cheek whiskers (extend to the right)
+            draw.line(
+                [(center_x + cheek_offset_x, cheek_y),
+                 (center_x + cheek_offset_x + whisker_len, cheek_y - whisker_spread)],
+                fill="grey", width=whisker_width,
+            )
+            draw.line(
+                [(center_x + cheek_offset_x, cheek_y),
+                 (center_x + cheek_offset_x + whisker_len, cheek_y)],
+                fill="grey", width=whisker_width,
+            )
+            draw.line(
+                [(center_x + cheek_offset_x, cheek_y),
+                 (center_x + cheek_offset_x + whisker_len, cheek_y + whisker_spread)],
+                fill="grey", width=whisker_width,
+            )
+
+        return draw
+
+    def draw_mouse(self, draw, players, prev_players, color,
+                   cell_size, half_size, step_size, width=10):
+        """
+        Draw a simple mouse to represent the runner
+        """
+        top_margin = 0
+        # Scale parameters from half_size
+        body_len = max(6, int(half_size * 3.0))         # body length (horizontal)
+        body_height = max(4, int(half_size * 1.6))      # body height (vertical)
+        nose_radius = max(2, int(body_height * 0.1))   # round nose tip
+        ear_radius = max(2, int(body_height * 0.28))    # ears
+        tail_len = max(8, int(half_size * 3.2))         # tail length
+        tail_width = max(1, width // 3)
+        whisker_len = max(6, int(half_size * 1.2))
+        whisker_spread = max(2, int(body_height * 0.25))  # vertical spread between whiskers
+
+        # Colors for details
+        detail_color = "black"
+
+        for (x, y), (x_prev, y_prev) in zip(players, prev_players):
             for j in range(1, step_size + 1):
                 center_x = (x_prev + (x - x_prev) * j / step_size) * cell_size + cell_size // 2
-                center_y = ((y_prev + (y - y_prev) * j / step_size) * cell_size) + 6 * 15 + cell_size // 2
+                center_y = ((y_prev + (y - y_prev) * j / step_size) * cell_size) + top_margin + cell_size // 2
+
+                # Body (wide ellipse centered slightly behind the nose)
+                body_left = center_x - body_len // 2
+                body_right = center_x + body_len // 2
+                body_top = center_y - body_height // 2
+                body_bottom = center_y + body_height // 2
+                draw.ellipse([body_left, body_top, body_right, body_bottom], fill=color)
+
+                # Nose (round cap at the front)
+                nose_cx = body_right  # rightmost front
+                nose_cy = center_y
                 draw.ellipse(
                     [
-                        center_x - player_radius,
-                        center_y - player_radius,
-                        center_x + player_radius,
-                        center_y + player_radius,
+                        nose_cx - nose_radius,
+                        nose_cy - nose_radius,
+                        nose_cx + nose_radius,
+                        nose_cy + nose_radius,
+                    ],
+                    fill=detail_color,
+                )
+
+                # Ears (two small circles near the top-front of the body)
+                ear_base_x = center_x + int(body_len * 0.20)
+                ear_base_y = center_y - int(body_height * 0.45)
+                # Left ear
+                draw.ellipse(
+                    [
+                        ear_base_x - ear_radius - ear_radius // 2,
+                        ear_base_y - ear_radius,
+                        ear_base_x - ear_radius // 2,
+                        ear_base_y + ear_radius,
                     ],
                     fill=color,
                 )
-                
+                # Right ear
+                draw.ellipse(
+                    [
+                        ear_base_x + ear_radius // 2,
+                        ear_base_y - ear_radius,
+                        ear_base_x + ear_radius + ear_radius // 2,
+                        ear_base_y + ear_radius,
+                    ],
+                    fill=color,
+                )
+
+                # Whiskers (three lines per side from the nose)
+                # Left side
+                draw.line(
+                    [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy - whisker_spread)],
+                    fill=detail_color,
+                    width=max(1, tail_width - 1),
+                )
+                draw.line(
+                    [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy)],
+                    fill=detail_color,
+                    width=max(1, tail_width - 1),
+                )
+                draw.line(
+                    [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy + whisker_spread)],
+                    fill=detail_color,
+                    width=max(1, tail_width - 1),
+                )
+                # Right side (optional for symmetry; comment out if you prefer one-sided whiskers)
+                draw.line(
+                    [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy - whisker_spread)],
+                    fill=detail_color,
+                    width=max(1, tail_width - 1),
+                )
+                draw.line(
+                    [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy)],
+                    fill=detail_color,
+                    width=max(1, tail_width - 1),
+                )
+                draw.line(
+                    [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy + whisker_spread)],
+                    fill=detail_color,
+                    width=max(1, tail_width - 1),
+                )
+
+                # Curvy tail: start at back center, draw a gentle sine-like polyline
+                tail_start_x = body_left
+                tail_start_y = center_y
+                segments = 12
+                amp = max(2, int(body_height * 0.35))  # amplitude of the curve
+                tail_pts = []
+                for s in range(segments + 1):
+                    t = s / segments
+                    # Ease-out to taper curvature near the end
+                    x = tail_start_x - int(t * tail_len)
+                    y = tail_start_y + int(amp * 0.5 * np.sin(2 * np.pi * (t + 0.15)))
+                    tail_pts.append((x, y))
+                # Draw the polyline
+                for a, b in zip(tail_pts, tail_pts[1:]):
+                    draw.line([a, b], fill=color, width=tail_width)
+
         return draw
 
-    def save(self, text, prefix):
-        
+    def save(self, prefix, text=None):
+
+        """
+        Save image snapshot of each step in the game to later record them into a gif
+        """
+
         # Get player (prev) positions
-        x_players = self.extract_position(self._rendered,'x') + self.extract_position(self._rendered,'%')
-        o_players = self.extract_position(self._rendered,'o') + self.extract_position(self._rendered,'%')
-        
+        x_players = self.extract_position(self._rendered, 'x') + self.extract_position(self._rendered, '%')
+        o_players = self.extract_position(self._rendered, 'o') + self.extract_position(self._rendered, '%')
+
         if str(self._prev_rendered) == '':
             self._prev_rendered = self._rendered
-        
-        x_prev_players = self.extract_position(self._prev_rendered,'x') + self.extract_position(self._prev_rendered,'%')
-        o_prev_players = self.extract_position(self._prev_rendered,'o') + self.extract_position(self._prev_rendered,'%')
-                
+
+        x_prev_players = self.extract_position(self._prev_rendered, 'x') + self.extract_position(self._prev_rendered, '%')
+        o_prev_players = self.extract_position(self._prev_rendered, 'o') + self.extract_position(self._prev_rendered, '%')
+
         # Set cell size and create an empty image
-        cell_size  = 50
+        cell_size = 200
         grid_width = len(self._rendered)
-        grid_height = len(self._rendered) + 3
+        grid_height = len(self._rendered)
         image_width = grid_width * cell_size
         image_height = grid_height * cell_size
         image = Image.new("RGB", (image_width, image_height), "white")
         draw = ImageDraw.Draw(image)
-        
+
         # Draw text
-        font = ImageFont.load_default()
-        text_margin = 5
-        draw.text((text_margin, text_margin), text, fill=(0, 0, 0), font=font)
+        if text is not None:
+            font = ImageFont.load_default()
+            text_margin = 5
+            draw.text((text_margin, text_margin), text, fill=(0, 0, 0), font=font)
 
         # Draw grid lines
+        top_margin = 0
+        grid_line_width = 2  # make lines a tiny bit wider
         for i in range(0, image_width, cell_size):
-            draw.line([(i, 6 * 15), (i, image_height)], fill="black")
-        for j in range(6 * 15, image_height, cell_size):
-            draw.line([(0, j), (image_width, j)], fill="black")
-        
+            draw.line([(i, top_margin), (i, image_height)], fill="#c9c9c9", width=grid_line_width)
+        for j in range(top_margin, image_height, cell_size):
+            draw.line([(0, j), (image_width, j)], fill="#c9c9c9", width=grid_line_width)
+
         # Draw players
-        player_radius = 20
-        step_size = 5
-        draw = self.draw_position(draw, x_players, x_prev_players, "red", 
-                                   cell_size, player_radius, step_size)
-        draw = self.draw_position(draw, o_players, o_prev_players, "blue", 
-                                   cell_size, player_radius*0.8, step_size)
+        player_radius = 50
+        step_size = 1
+        draw = self.draw_cat(draw, x_players, x_prev_players, "black",
+                                         cell_size, player_radius, step_size)
+        draw = self.draw_mouse(draw, o_players, o_prev_players, "grey",
+                                        cell_size, player_radius, step_size)
 
         # Save stationary image
-        while len(prefix) < 3:
-            prefix = '0'+prefix
-            
-        image.save(self.savePath+prefix+".png")
-        
+        prefix = str(prefix).zfill(3)
+        image.save(os.path.join(self.savePath, prefix + ".png"))
+
         # Save current state as previous
         self._prev_rendered = self._rendered
 
     def record(self, game_name):
-        gif = []
-        imgs = []
-        for filename in glob.glob(self.savePath + '*.png')[1:]:
-            pimg = Image.open(filename)
-            imgs.append(pimg)
-            imgs.append(pimg)
-            imgs.append(pimg)
 
-        for img in imgs:
-            gif.append(img)
+        """
+        Record a gif from all saved image snapshots of each step in the game
+        """
+
         try:
-            gif[0].save(self.savePath + game_name + '.gif', save_all=True, optimize=False, append_images=gif[1:], loop=0)
-        except:
-            print("Failed saving to gif")
-        del gif
-        del imgs
-        del pimg
-        del filename
-        del img
-        try:
-            for filename in glob.glob(self.savePath + '*.png'):
-                os.remove(filename)
-        except:
-            print('skip')
+            frame_files = sorted(glob.glob(os.path.join(self.savePath, '*.png')))
+            if not frame_files:
+                print("No frames to record.")
+                return
+
+            imgs = [Image.open(fn) for fn in frame_files]
+            # duration in ms per frame; adjust as needed instead of duplicating frames
+            duration = 100
+            imgs[0].save(
+                os.path.join(self.savePath, game_name + '.gif'),
+                save_all=True,
+                optimize=False,
+                append_images=imgs[1:],
+                loop=0,
+                duration=duration,
+            )
+        except Exception as e:
+            print(f"Failed saving to gif: {e}")
+        finally:
+            # Ensure images are closed before deletion
+            for im in locals().get('imgs', []):
+                try:
+                    im.close()
+                except Exception:
+                    pass
+            try:
+                for filename in glob.glob(os.path.join(self.savePath, '*.png')):
+                    os.remove(filename)
+            except Exception as e:
+                print(f"Failed to clean up frames: {e}")

@@ -69,7 +69,7 @@ class Experiment():
                 arn.play_and_learn()
     def start_tensorboard(self):
         tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', self._experiment[1:]+'/logs', '--port', '6006'])
+        tb.configure(argv=[None, '--logdir', self._experiment+'/logs', '--port', '6006'])
         url = tb.launch()
         print(f"TensorBoard is running at {url}")
 

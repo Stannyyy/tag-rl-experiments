@@ -2,13 +2,14 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import glob
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
 # Load data
 experiment = 'experiment-20250808-1204'
-df = pd.read_csv(r'C:\Users\Stann\PycharmProjects\tag-rl-experiment/'+experiment+r'\final-results\results.csv')
+df_paths = glob.glob(pd.read_csv(r'C:\Users\Stann\PycharmProjects\tag-rl-experiment/'+experiment+r'\competition\*\*\results.csv'))
 
 # Create pivot tables
 runner_pivot = df.pivot(index='player1', columns='player2', values='player1_runner_mean')
@@ -41,7 +42,7 @@ axes[1].set_yticklabels(players_sorted)
 plt.colorbar(im2, ax=axes[1], fraction=0.046, pad=0.04)  # Smaller legend
 
 plt.tight_layout()
-plt.savefig(os.getcwd()+'/'+experiment+ "/final-results/heatmaps.png", dpi=300, bbox_inches='tight')  # Save as PNG
+plt.savefig(os.getcwd()+'/'+experiment+ "/competition/heatmaps.png", dpi=300, bbox_inches='tight')  # Save as PNG
 plt.close()
 
 # Order

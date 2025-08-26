@@ -5,7 +5,7 @@ import os
 from config import Config
 import pickle
 import shutil
-from tensorboard import program
+from logs import TensorBoardLogs
 
 class Experiment():
     def __init__(self, experiment):

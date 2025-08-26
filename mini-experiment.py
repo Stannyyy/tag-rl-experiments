@@ -1,7 +1,7 @@
 import tensorflow.keras as tf
 import numpy as np
 
-# with tfbare.device('/gpu:0'):
+# with tf.device('/gpu:0'):
 #     layers = []
 #     for layer_nr, layer in enumerate(self._layers):
 #         if self._add_LSTM & (layer_nr == 0):
@@ -11,7 +11,7 @@ import numpy as np
 #                                        activation=tf.layers.LeakyReLU())]
 #     layers += [tf.layers.Dense(self.numActions, activation='linear')]
 #     model = tf.models.Sequential(layers)
-#     model.compile(loss='mse', optimizer=tf.optimizers.Adam(learning_rate=self._learningRate))
+#     model.compile(loss='mse', optimizer=tf.optimizers.Adam(learning_rate=self._learning_rate))
 # self._model = model
 
 x_batch = np.array([

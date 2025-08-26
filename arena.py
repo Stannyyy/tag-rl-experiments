@@ -4,8 +4,9 @@ import numpy as np
 from config import Config
 import os
 import pickle
-import tensorflow as tfbare
+import tensorflow as tf
 import datetime
+import sys
 
 # Arena
 class Arena(Config):
@@ -15,7 +16,7 @@ class Arena(Config):
         Config.__init__(self)
         
         # Arena variables
-        self.cnt = 0
+        self.cnt = 1
         self.stt = time.time()
         self.loss_check = True
         self.modertr = modertr
@@ -25,58 +26,58 @@ class Arena(Config):
 
     def play_and_learn(self):
         self.start_stopwatch()
+        new_round = True
         # Loop for number of episodes
-        while self.cnt < self.numEpisodes:
-            self.cnt += 1
-            if len(self.modertr.players[0]._losses) > 0:
-                self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.modertr.players[0]._losses[-1],2)))
-            for player in self.modertr.players:
-                player.step = self.cnt
-            if (self.cnt % self.numEpisodesBeforePrint == 0) & (self.cnt != 0):
-
-                # Print progress
-                self.end = time.time()
-                print('Round', self.cnt, 'out of', self.numEpisodes, round(self.end - self.stt), 'sec elapsed')
-
+        if self.cnt < self.numEpisodes:
+            while (self.cnt % self.numEpisodesBeforePrint != 1) | (new_round == True):
+                new_round = False
                 for player in self.modertr.players:
-                    if player.isRandom:
-                        # Print progress
-                        av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
-                        av_rwd_runner = np.array(player.reward_store_tagger[-100:]).mean().round(5)
-                        print(player.name + ' = av reward tagger: ' + str(
-                            av_rwd_tagger) + ', av reward runner: ' + str(av_rwd_runner))
+                    player.step = self.cnt
 
-                    else:
-                        # Print progress
-                        av_loss = np.array(player.losses[-100:]).mean().round(5)
-                        av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
-                        av_rwd_runner = np.array(player.reward_store_runner[-100:]).mean().round(5)
-                        eps = round(player.eps, 2)
-                        print(player.name + ' = av loss: ' + str(av_loss) + ', eps: ' + str(eps) + ', av reward tagger: ' + str(
-                            av_rwd_tagger) + ', av reward runner: ' + str(av_rwd_runner))
+                # Play episode!
+                self.modertr.play(False)
+                if len(self.modertr.players[0]._losses) > 0:
+                    self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.modertr.players[0]._losses[-1],2)))
+                self.cnt += 1
 
-                        # Check if learning done
-                        if av_loss < 0.0001:
-                            self.cnt = self.numEpisodes # Call it a day
+                # Stop the stopwatch
+                self.stop_stopwatch()
 
-                # Show a couple of episodes
-                for i in range(2):
-                    self.modertr.play(self.createVideo)
+            # Print progress
+            self.end = time.time()
+            print('\nRound', self.cnt-1, 'out of', self.numEpisodes, round(self.end - self.stt), 'sec elapsed')
 
-                # Save models
-                self.save_status()
+            unique_players = list(set(self.modertr.players))
+            for player in unique_players:
+                if player.isRandom:
+                    # Print progress
+                    av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
+                    av_rwd_runner = np.array(player.reward_store_tagger[-100:]).mean().round(5)
+                    print(player.name + '; av reward tagger: ' + str(
+                        av_rwd_tagger) + ', av reward runner: ' + str(av_rwd_runner))
 
-                # Start new timer
-                self.stt = time.time()
+                else:
+                    # Print progress
+                    av_loss = np.array(player.losses[-100:]).mean().round(5)
+                    av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
+                    av_rwd_runner = np.array(player.reward_store_runner[-100:]).mean().round(5)
+                    eps = round(player.eps, 2)
+                    print(player.name + '; av loss: ' + str(av_loss) + ', eps: ' + str(eps) + ', av reward tagger: ' + str(
+                        av_rwd_tagger) + ', av reward runner: ' + str(av_rwd_runner))
 
-            # Play episode!
-            self.modertr.play(False)
-            
-            # Stop the stopwatch
-            self.stop_stopwatch()
+                    # Check if learning done
+                    if av_loss < 0.0001:
+                        self.cnt = self.numEpisodes # Call it a day
 
-        # End arena
-        self.cnt += 1
+            # Show a couple of episodes
+            for i in range(2):
+                self.modertr.play(self.createVideo, learn=False)
+
+            # Save models
+            self.save_status()
+
+            # Start new timer
+            self.stt = time.time()
 
     def save_status(self):
         for p in self.modertr.players:
@@ -87,7 +88,7 @@ class Arena(Config):
                     p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
                     if p._curiosity:
                         p.save_checkpoint_next_state(p.model_next_state, self.cnt, p.name, self.training_phase)
-                p.summary_writer()
+                p.write_summary_to_tensorboard()
 
                 # Save status
                 p._model = 0
@@ -125,12 +126,12 @@ class Arena(Config):
     def progress_bar(self, task, based_on='episodes', i=100, total=None):
         if based_on == 'episodes':
             total = self.numEpisodesBeforePrint
-            percent = round(100 * (self.cnt % total / float(total)))
+            i = self.cnt
         elif based_on == 'i':
             if total is None:
                 total = self.numEpisodesBeforePrint/10
-            percent = round(100 * (i % total / float(total)))
-        if percent ==   0:
+        percent = int(np.ceil((100 * (i % total / float(total)))))
+        if percent == 0:
             percent = 100
-        bar = '█' * int(percent) + '-' * (100 - int(percent))
+        bar = '█' * percent + '-' * (100 - percent)
         print(f"\r|{bar}| {percent}%   {task}  ", end="")

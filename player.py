@@ -10,14 +10,15 @@ import random
 import numpy as np
 import math
 from model import Model, ModelNextState
-import tensorflow as tfbare
+import tensorflow as tf
 import os
+
 
 # Player
 class Player(Model, ModelNextState):
 
-    def __init__(self, experiment, name, bootstrapValueEpsilon = 0.001, discountFactor = 0.95,
-                 learningRate = 0.001, layers = [100,100,100], addLSTM = False, sequenceLength = 1,
+    def __init__(self, experiment, name, bootstrapValueEpsilon=0.0005, discountFactor=0.975,
+                 learningRate=0.001, layers=[100, 100, 100], addLSTM=False, sequenceLength=1,
                  render=False, justLike=None, testMode=False, curiosity=False, curiosity_beta=0,
                  maxEpsilon=None):
 
@@ -64,20 +65,26 @@ class Player(Model, ModelNextState):
         self._reward = 0
         self._tot_reward_tagger = 0
         self._tot_reward_runner = 0
+        self._options = []
 
-        # Is the player learning? Of temporarily paused due to test mode?
+        # Is the player learning? Or temporarily paused due to test mode?
         self._test_mode = testMode
 
-        # Save intermittant folders
-        self._state_path = os.getcwd() + experiment + "/state/part1-" + self._name.replace(" ","") + ".pickle"
-        self._checkpoint_path = os.getcwd() + experiment + "/checkpoints/" + self._name + "/part1/"
-        self._log_path = os.getcwd() + experiment + "/logs/dql_" + self._name + "/"
+        # Save intermittent folders
+        self._state_path = os.path.join(os.getcwd(), experiment, "state",
+                                        "part1-" + self._name.replace(" ", "") + ".pickle")
+        self._checkpoint_path = os.path.join(os.getcwd(), experiment, "checkpoints", self._name, "part1")
+        self._log_path = os.path.join(os.getcwd(), experiment, "logs", "dql_" + self._name)
 
         # Set up the tensorboard
-        self._summary_writer = tfbare.summary.create_file_writer(self._log_path)
+        self._summary_writer = tf.summary.create_file_writer(self._log_path)
         self._summary_writer_collection = []
 
-    def choose_action(self, options, save_game, game=None):
+    def choose_action(self, options, save_game):
+
+        """
+        Choose action: random based on chance value epsilon OR based on current policy for the given state
+        """
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
@@ -85,7 +92,7 @@ class Player(Model, ModelNextState):
             choice = random.sample(options, k=1)[0]
         else:
             if self._add_LSTM:
-                ix_sequence_start = self._sequence_length*-1+1
+                ix_sequence_start = self._sequence_length * -1 + 1
                 if ix_sequence_start == 0:
                     last_x_minus_1_samples = []
                 else:
@@ -94,138 +101,230 @@ class Player(Model, ModelNextState):
             else:
                 prediction = self.predict_one([self._state])
             prediction = [p if i in options else -np.inf for i, p in enumerate(prediction)]
-            choice = np.argmax(prediction)
+            choice = int(np.argmax(prediction))
 
         return choice
 
-    def summary_writer(self):
+    def write_summary_to_tensorboard(self):
+
+        """
+        Write collection of logs to tensorboard
+        """
+
         with self._summary_writer.as_default():
             for s in self._summary_writer_collection:
-                tfbare.summary.scalar(s.get('name'), s.get('value'), step=s.get('step'))
+                tf.summary.scalar(s.get('name'), s.get('value'), step=s.get('step'))
         self._summary_writer_collection = []
 
     def get_name(self):
         return self._name
+
     name = property(get_name)
 
     def get_model(self):
         return self._model
+
     model = property(get_model)
 
     def get_model_next_state(self):
         return self._model_next_state
+
     model_next_state = property(get_model_next_state)
 
     def get_losses(self):
         return self._losses
+
     losses = property(get_losses)
 
     def get_reward_store_tagger(self):
         return self._reward_store_tagger
+
     reward_store_tagger = property(get_reward_store_tagger)
 
     def get_reward_store_runner(self):
         return self._reward_store_runner
+
     reward_store_runner = property(get_reward_store_runner)
 
     def get_eps(self):
         return self._eps
+
     eps = property(get_eps)
 
     def set_eps(self, eps):
         self._eps = eps
+
     eps = property(get_eps, set_eps)
 
     def get_samples(self):
         return self._samples
-    samples = property(get_eps)
+
+    samples = property(get_samples)
 
     def set_samples(self, samples):
         self._samples = samples
+
     samples = property(get_samples, set_samples)
 
     def get_state(self):
         return self._state
+
     state = property(get_state)
 
     def set_state(self, game_x_list, game_y_list, turn, is_tagger, turn_count=None):
         self._state = game_x_list + game_y_list + [turn, int(is_tagger)]
-    state = property(set_state)
+
+    state = property(get_state, set_state)
+
+    def get_options(self):
+        return self._options
+
+    options = property(get_options)
+
+    def set_options(self, options):
+        self._options = options
+
+    options = property(get_options, set_options)
 
     def get_step(self):
         return self._step
+
     step = property(get_step)
 
     def set_step(self, step):
         self._step = step
+
     step = property(get_step, set_step)
 
     def get_sample(self):
         return self._sample
+
     sample = property(get_sample)
 
     def set_sample(self, choice, reward):
         self._sample = [self._state, choice, reward]
+
     sample = property(get_sample, set_sample)
 
     def update_sample(self, options):
+
+        """
+        Update remaining sample with next state and options for next state
+        """
+
         if options is None:
             self._sample += [None, None]
         if len(self._sample) == 3:
             self._sample += [self._state, options]
 
-    def add_sample(self):
+    def add_sample(self, tag_happened, game_not_over):
+
+        """
+        Add sample to sample history (and fix buffer if necessary)
+        The sample buffer is there in case the player is playing against itself. Then the next state is not the next
+        sample, but the one where it is in the same role again.
+        """
+
+        # If the sample is empty, you're done
+        if len(self._sample) == 0:
+            return None
+
+        # If the sample is not of length 5, complete it using the sample buffer
         if len(self._sample) != 5:
-            self.finalize_sample_buffer()
+            self.finalize_sample_buffer(tag_happened, game_not_over)
 
-        if self._sample != []:
-            if len(self._sample) < 4:
-                self._sample = []
-            elif self._sample[3] is not None:
-                if self._sample[0][-2] != self._sample[3][-2]: # If role of current and next state are different
-                    self._sample_buffer += [self._sample]      # due to player playing against itself: buffer to correct
-                    self.correct_sample_buffer()
+        # If the sample could not be completed using the sample buffer, skip altogether
+        if len(self._sample) < 4:
+            self._sample = []
 
+        # If no tag happened, check if sample needs correction (if yes add to sample buffer)
+        elif tag_happened == False:
+            # If role of current and next state are different
+            # due to player playing against itself: buffer to correct
+            if self._sample[0][-2] != self._sample[3][-2]:
+                if game_not_over == False:
+                    self._sample = []
+                    self._sample_buffer = []
+                else:
+                    self._sample_buffer += [self._sample]
+
+                # For the sample buffer, find the subsequent samples with matching roles
+                # The state and next state should have the same role for one sample
+                self.correct_sample_buffer()
+
+        # Only if the contents of sample are still relevant (not deleted in the process above), add to sample history
         if self._sample != []:
             self._samples_count += 1
             self._samples += [self._sample]
             self._sample = []
+
+        # If the amount of samples exceeds memory, truncate
         if len(self._samples) > self.maxMemory:
             self._samples = self._samples[-self.maxMemory:]
-    
+
     def correct_sample_buffer(self):
+
+        """
+        Take the first sample in the buffer, then find the matching sample to correct the first.
+        The sample buffer is there in case the player is playing against itself. Then the next state is not the next
+        sample, but the one where it is in the same role again.
+        """
+
+        # Take the first sample
         sample_to_correct = self._sample_buffer[0]
         turn = sample_to_correct[0][-2]
         for _sample in self._sample_buffer:
             if _sample[3] is not None:
+
+                # Find matching sample (same role)
                 if _sample[3][-2] == turn:
+
+                    # Take this found sample to correct the next state and next options of the sample to correct
                     sample_to_correct[-2:] = _sample[-2:]
                     self._sample = sample_to_correct
+
+                    # Once corrected, it can be deleted from the buffer
                     self._sample_buffer = self._sample_buffer[1:]
                     break
-        if sample_to_correct[3][-2] != turn:
+
+        # If the sample to correct (first of sample buffer) is irrelevant, empty sample so it is skipped
+        if sample_to_correct[3] is None or sample_to_correct[3][-2] != turn:
             self._sample = []
 
-    def finalize_sample_buffer(self):
+    def finalize_sample_buffer(self, tag_happened, game_not_over):
+
+        """
+        At the end of the episode, go through the remaining samples in the buffer and add them to history
+        Then, start an empty sample buffer
+        """
+
         for _sample in self._sample_buffer:
-            _sample[3] = None
-            _sample[4] = None
-            if abs(self._reward) > abs(_sample[2]):
-                if (_sample[2] > 0) == (self._reward > 0):
-                    _sample[2] = self._reward * -1
-                else:
-                    _sample[2] = self._reward
+            if tag_happened:
+                _sample[3] = None
+                _sample[4] = None
+            elif game_not_over == False:
+                _sample = []
+                self._sample_buffer = []
             self._sample = _sample
-            self.add_sample()
+            self.add_sample(tag_happened, game_not_over)
         self._sample_buffer = []
 
     def learn_by_replay(self, batch_size):
+
+        """
+        Learn by replay! The model gets trained by using the sample buffer. You take a random batch of the memory,
+        shuffle them and do a training round using the deep Q (reinforcement) learning protocol.
+        Save the logs for the tensorboard
+        """
+
         # Only learn once memory has reached batch size and not in test mode
-        if (self._test_mode) | (len(self._samples) <= batch_size):
+        if self._test_mode or (len(self._samples) <= batch_size):
             return 0
 
-        # Make random batch, but always include some end states
+        # Make a random batch
         batch = self.create_batch()
+        if not batch:
+            return 0
 
         # Predict Q(s,a) given the batch of states
         states = np.array([val[0] for seq in batch for val in seq])
@@ -235,18 +334,19 @@ class Player(Model, ModelNextState):
         q_s_a_uncorrected = np.copy(q_s_a)
 
         # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
-        next_states = np.array([(np.zeros(self.numStates) if val[3] is None else val[3]) for seq in batch for val in seq])
+        next_states = np.array(
+            [(np.zeros(self.numStates) if val[3] is None else val[3]) for seq in batch for val in seq])
         if self._add_LSTM:
             next_states = next_states.reshape((self.batchSize, self._sequence_length, self.numStates))
         q_s_a_d = self.predict_batch(next_states)
 
         # Extract slices from batch
-        all_states = np.array([b[0][0] for b in batch])*1.0
+        all_states = np.array([b[0][0] for b in batch]) * 1.0
         all_next_states = np.array([None if b[0][0] is None else np.array(b[0][0]).astype(float) for b in batch])
         if self._add_LSTM:
             all_states = all_states.reshape((self.batchSize, self._sequence_length, self.numStates))
             all_next_states = all_next_states.reshape((self.batchSize, self._sequence_length, self.numStates))
-        all_rewards = np.array([b[0][2] for b in batch])*1.0
+        all_rewards = np.array([b[0][2] for b in batch]) * 1.0
 
         # Set up training arrays
         corrected_qs = np.zeros((self.batchSize, self.numActions))
@@ -265,7 +365,7 @@ class Player(Model, ModelNextState):
             corrected_q = q_s_a[i]
 
             # Clip corrected_q
-            corrected_q = [max(min(c*1.0, self.tagPoints*1.0), self.tagPoints*-1.0) for c in corrected_q]
+            corrected_q = [max(min(c * 1.0, self.tagPoints * 1.0), self.tagPoints * -1.0) for c in corrected_q]
 
             # Update the q value for action
             if next_state is None:
@@ -290,7 +390,7 @@ class Player(Model, ModelNextState):
         self.update_epsilon()
 
         # Add q to tensorboard
-        end_state = np.abs(all_rewards) >= (self.tagPoints - self.stepPoints*2)
+        end_state = np.abs(all_rewards) >= (self.tagPoints - self.stepPoints * 2)
         self._summary_writer_collection += [
             {"name": 'Q/overall',
              "value": np.round(np.mean(np.abs(q_s_a_uncorrected)), 1),
@@ -299,15 +399,15 @@ class Player(Model, ModelNextState):
         if np.sum(end_state) > 0:
             uncorrected_end_qs = q_s_a_uncorrected[end_state]
             corrected_end_qs = corrected_qs[end_state]
-            crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints*2)
+            crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints * 2)
             q_crucial_action = uncorrected_end_qs[crucial_action]
-            q_alternative_action = uncorrected_end_qs[crucial_action==False]
+            q_alternative_action = uncorrected_end_qs[crucial_action == False]
             self._summary_writer_collection += [
                 {
-                    "name": 'Q/tagged-state-of-crucial-action', 
+                    "name": 'Q/tagged-state-of-crucial-action',
                     "value": np.round(np.mean(np.abs(q_crucial_action)), 1),
                     "step": self._step
-                 },
+                },
                 {
                     "name": 'Q/tagged-state-of-alternative-action',
                     "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
@@ -336,7 +436,14 @@ class Player(Model, ModelNextState):
             ]
 
     def create_batch(self):
-        selection = random.choices(range(len(self._samples)-self._sequence_length), k=self.batchSize)
+        # Guard: not enough samples to form a sequence
+        if len(self._samples) <= self._sequence_length:
+            return []
+
+        selection_pool_size = len(self._samples) - self._sequence_length
+        if selection_pool_size <= 0:
+            return []
+        selection = random.choices(range(selection_pool_size), k=self.batchSize)
 
         if self._add_LSTM:
             batch = []
@@ -347,19 +454,23 @@ class Player(Model, ModelNextState):
                     compare_4 = self._samples[i][0][4]
                     compare_5 = self._samples[i][0][5]
                     while len(samples_i) < self._sequence_length:
-                        if (compare_4 == self._samples[i+add_i][0][4]) & (compare_5 == self._samples[i+add_i][0][5]):
-                            if i+add_i >= (len(self._samples)-1):
+                        if (compare_4 == self._samples[i + add_i][0][4]) and (
+                                compare_5 == self._samples[i + add_i][0][5]):
+                            if i + add_i >= (len(self._samples) - 1):
                                 break
-                            if self._samples[i+add_i][4] is None:
+                            if self._samples[i + add_i][4] is None:
                                 if len(samples_i) != (self._sequence_length - 1):
                                     break
-                            samples_i += [self._samples[i+add_i]]
-                        add_i +=1
+                            samples_i += [self._samples[i + add_i]]
+                        add_i += 1
                     if len(samples_i) == self._sequence_length:
                         batch += [samples_i]
                     else:
                         continue
-                selection = random.choices(range(len(self._samples) - self._sequence_length), k=self.batchSize-len(batch))
+                remaining = self.batchSize - len(batch)
+                if remaining <= 0:
+                    break
+                selection = random.choices(range(selection_pool_size), k=remaining)
         else:
             batch = [[self._samples[i]] for i in selection]
         return batch
@@ -375,7 +486,7 @@ class Player(Model, ModelNextState):
         else:
             prediction = self.predict_one([self._state])
 
-        prediction = [np.round(p,1) for p in prediction]
+        prediction = [np.round(p, 1) for p in prediction]
         game.render(prediction, self._state)
         print('---')
         print(self._state)
@@ -389,7 +500,7 @@ class Player(Model, ModelNextState):
             self._reward_store_tagger.append(float(self._tot_reward_tagger))
         if self._tot_reward_runner != 0:
             self._reward_store_runner.append(float(self._tot_reward_runner))
-        
+
     def update_epsilon(self):
         # Add epsilon to tensorboard
         self._summary_writer_collection += [
@@ -397,11 +508,12 @@ class Player(Model, ModelNextState):
                 "name": 'params/epsilon',
                 "value": np.round(self._eps, 3),
                 "step": self._step
-             }
+            }
         ]
 
         # Update epsilon
-        self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(-self._bootstrapValueEpsilon * self._step)
+        self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(
+            -self._bootstrapValueEpsilon * self._step)
 
     def add_rewards_to_tensorboard(self, turn_count):
         self._summary_writer_collection += [
@@ -409,7 +521,7 @@ class Player(Model, ModelNextState):
                 "name": 'Rewards/turn_count',
                 "value": turn_count,
                 "step": self._step
-             }
+            }
         ]
         if self._tot_reward_tagger != 0:
             self._summary_writer_collection += [
@@ -440,17 +552,22 @@ class Player(Model, ModelNextState):
 
         self.define_model()
         self.model.build(input_shape=input_shape)
-        checkpoints = [p for p in os.listdir(self._checkpoint_path) if '-next-state' not in p]
+
+        checkpoints = [p for p in os.listdir(self._checkpoint_path) if
+                       '-next-state' not in p and p.endswith('.weights.h5')]
         checkpoints.sort()
-        self.load_checkpoint(self._checkpoint_path + checkpoints[-1])
+        if checkpoints:
+            self.load_checkpoint(os.path.join(self._checkpoint_path, checkpoints[-1]))
 
         if self._curiosity:
             self.define_model_next_state()
             self.model_next_state.build(input_shape=input_shape)
-            checkpoints_next_state = [p for p in os.listdir(self._checkpoint_path) if '-next-state' in p]
+            checkpoints_next_state = [p for p in os.listdir(self._checkpoint_path) if
+                                      '-next-state' in p and p.endswith('.weights.h5')]
             checkpoints_next_state.sort()
-            self.load_checkpoint_next_state(self._checkpoint_path + checkpoints_next_state[-1])
-        self._summary_writer = tfbare.summary.create_file_writer(self._log_path)
+            if checkpoints_next_state:
+                self.load_checkpoint_next_state(os.path.join(self._checkpoint_path, checkpoints_next_state[-1]))
+        self._summary_writer = tf.summary.create_file_writer(self._log_path)
 
     def new_part(self, current_part, new_part):
         self._state_path = self._state_path.replace(current_part, new_part)
@@ -461,7 +578,6 @@ class Player(Model, ModelNextState):
 class RandomPlayer():
 
     def __init__(self, name, test_mode=True):
-
         # Identifying variables
         self._name = name
         self.isRandom = True
@@ -477,22 +593,27 @@ class RandomPlayer():
         self._tot_reward_tagger = 0
         self._tot_reward_runner = 0
 
-        # Is the player learning? Of temporarily paused due to test mode?
+        # Is the player learning? Or temporarily paused due to test mode?
         self._test_mode = test_mode
 
     def choose_action(self, options, save_game, game=None):
+        if not options:
+            return 0
         return random.sample(options, k=1)[0]
 
     def get_name(self):
         return self._name
+
     name = property(get_name)
 
     def get_reward_store_tagger(self):
         return self._reward_store_tagger
+
     reward_store_tagger = property(get_reward_store_tagger)
 
     def get_reward_store_runner(self):
         return self._reward_store_runner
+
     reward_store_runner = property(get_reward_store_runner)
 
     def new_game(self):
@@ -532,17 +653,19 @@ class RandomPlayer():
 
     def get_step(self):
         return self._step
+
     step = property(get_step)
 
     def set_step(self, step):
         self._step = step
+
     step = property(get_step, set_step)
+
 
 # Player
 class StillPlayer():
 
     def __init__(self, name, test_mode=True):
-
         # Identifying variables
         self._name = name
         self.isRandom = True
@@ -558,7 +681,7 @@ class StillPlayer():
         self._tot_reward_tagger = 0
         self._tot_reward_runner = 0
 
-        # Is the player learning? Of temporarily paused due to test mode?
+        # Is the player learning? Or temporarily paused due to test mode?
         self._test_mode = test_mode
 
     def choose_action(self, options, save_game, game=None):
@@ -566,14 +689,17 @@ class StillPlayer():
 
     def get_name(self):
         return self._name
+
     name = property(get_name)
 
     def get_reward_store_tagger(self):
         return self._reward_store_tagger
+
     reward_store_tagger = property(get_reward_store_tagger)
 
     def get_reward_store_runner(self):
         return self._reward_store_runner
+
     reward_store_runner = property(get_reward_store_runner)
 
     def new_game(self):
@@ -613,8 +739,10 @@ class StillPlayer():
 
     def get_step(self):
         return self._step
+
     step = property(get_step)
 
     def set_step(self, step):
         self._step = step
+
     step = property(get_step, set_step)
