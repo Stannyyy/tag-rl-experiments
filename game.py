@@ -14,6 +14,10 @@ import copy
 import glob
 import os
 
+# Helpers
+def mold_to_size(value, size):
+    return str(value).strip().replace(" ", "")[:size].ljust(size)
+
 # Game
 class Game(Config):
 
@@ -66,7 +70,7 @@ class Game(Config):
         self._ended = 0
         self._tag_happened = False
 
-    # Move options        
+    # Move options
     def what_options(self, turn):
 
         """
@@ -183,7 +187,7 @@ class Game(Config):
 
         return reward
 
-    def render(self, prediction=None, state=None):
+    def render(self, prediction=None, state=None, display=False, size=5):
 
         """
         Render a game for debugging purposes
@@ -194,41 +198,45 @@ class Game(Config):
         taggers = np.where(self._taggers)[0].tolist()
         runners = np.where([t == False for t in self._taggers])[0].tolist()
         if prediction is not None:
-            prediction = [str(p).ljust(5) for p in prediction]
+            print_prediction = []
+            for p in prediction:
+                int_digits = len(str(int(p)))
+                if int_digits > size:
+                    p = f'{str(int(p))[0]}e{int_digits-1}'
+                print_prediction += [mold_to_size(p, size)]
 
         for tagger in taggers:
             x_tagger = self._x_list[tagger]
             y_tagger = self._y_list[tagger]
-            playing_field[x_tagger, y_tagger] = '  x  '
+            playing_field[x_tagger, y_tagger] = ('x    ' + playing_field[x_tagger, y_tagger]).strip().replace(" ", "").ljust(size)
 
             if (prediction is not None) and (state is not None):
                 if tagger == state[4]:
-                    for i, c in enumerate(prediction):
+                    for i, c in enumerate(print_prediction):
                         x, y = self.change_position(i, x_tagger, y_tagger)
                         if (0 <= x < self.gridSize) and (0 <= y < self.gridSize):
-                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(5)
+                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(size)
 
         for runner in runners:
             x_runner = self._x_list[runner]
             y_runner = self._y_list[runner]
-            if playing_field[x_runner, y_runner] == '  x  ':
-                playing_field[x_runner, y_runner] = '  %  '
+            if 'x' in playing_field[x_runner, y_runner]:
+                playing_field[x_runner, y_runner] = playing_field[x_runner, y_runner].replace('x', '%', 1)
             else:
-                playing_field[x_runner, y_runner] = ('  o  ' +
-                                                     playing_field[x_runner, y_runner]
-                                                     ).strip().replace(" ", "").ljust(5)
+                playing_field[x_runner, y_runner] = ('o    ' + playing_field[x_runner, y_runner]).strip().replace(" ", "").ljust(size)
 
             if (prediction is not None) and (state is not None):
                 if runner == state[4]:
-                    for i, c in enumerate(prediction):
+                    for i, c in enumerate(print_prediction):
                         x, y = self.change_position(i, x_runner, y_runner)
                         if (0 <= x < self.gridSize) and (0 <= y < self.gridSize):
-                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(5)
+                            playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(size)
 
         self._rendered = playing_field.T
 
-        # If you need a display of the rendered field:
-        # print(self._rendered)
+        # Display the rendered field:
+        if display:
+            print(self._rendered)
 
     def extract_position(self, grid, symbol):
 
@@ -236,10 +244,10 @@ class Game(Config):
         Extract player position
         """
 
-        return [[x,y] for x in range(len(grid)) for y in range(len(grid[x])) if symbol in grid[x][y]]
+        return [[x,y] for x in range(len(grid)) for y in range(len(grid[x])) if symbol in str(grid[x][y])]
 
     def draw_cat(self, draw, players, prev_players, color,
-                 cell_size, player_radius, step_size, ear_ratio=0.8):
+                 cell_size, player_radius, ear_ratio=0.8):
         """
         Draw a simple cat to represent the tagger
         """
@@ -339,7 +347,7 @@ class Game(Config):
         return draw
 
     def draw_mouse(self, draw, players, prev_players, color,
-                   cell_size, half_size, step_size, width=10):
+                   cell_size, half_size, width=10):
         """
         Draw a simple mouse to represent the runner
         """
@@ -358,103 +366,102 @@ class Game(Config):
         detail_color = "black"
 
         for (x, y), (x_prev, y_prev) in zip(players, prev_players):
-            for j in range(1, step_size + 1):
-                center_x = (x_prev + (x - x_prev) * j / step_size) * cell_size + cell_size // 2
-                center_y = ((y_prev + (y - y_prev) * j / step_size) * cell_size) + top_margin + cell_size // 2
+            center_x = (x_prev + (x - x_prev)) * cell_size + cell_size // 2
+            center_y = ((y_prev + (y - y_prev)) * cell_size) + top_margin + cell_size // 2
 
-                # Body (wide ellipse centered slightly behind the nose)
-                body_left = center_x - body_len // 2
-                body_right = center_x + body_len // 2
-                body_top = center_y - body_height // 2
-                body_bottom = center_y + body_height // 2
-                draw.ellipse([body_left, body_top, body_right, body_bottom], fill=color)
+            # Body (wide ellipse centered slightly behind the nose)
+            body_left = center_x - body_len // 2
+            body_right = center_x + body_len // 2
+            body_top = center_y - body_height // 2
+            body_bottom = center_y + body_height // 2
+            draw.ellipse([body_left, body_top, body_right, body_bottom], fill=color)
 
-                # Nose (round cap at the front)
-                nose_cx = body_right  # rightmost front
-                nose_cy = center_y
-                draw.ellipse(
-                    [
-                        nose_cx - nose_radius,
-                        nose_cy - nose_radius,
-                        nose_cx + nose_radius,
-                        nose_cy + nose_radius,
-                    ],
-                    fill=detail_color,
-                )
+            # Nose (round cap at the front)
+            nose_cx = body_right  # rightmost front
+            nose_cy = center_y
+            draw.ellipse(
+                [
+                    nose_cx - nose_radius,
+                    nose_cy - nose_radius,
+                    nose_cx + nose_radius,
+                    nose_cy + nose_radius,
+                ],
+                fill=detail_color,
+            )
 
-                # Ears (two small circles near the top-front of the body)
-                ear_base_x = center_x + int(body_len * 0.20)
-                ear_base_y = center_y - int(body_height * 0.45)
-                # Left ear
-                draw.ellipse(
-                    [
-                        ear_base_x - ear_radius - ear_radius // 2,
-                        ear_base_y - ear_radius,
-                        ear_base_x - ear_radius // 2,
-                        ear_base_y + ear_radius,
-                    ],
-                    fill=color,
-                )
-                # Right ear
-                draw.ellipse(
-                    [
-                        ear_base_x + ear_radius // 2,
-                        ear_base_y - ear_radius,
-                        ear_base_x + ear_radius + ear_radius // 2,
-                        ear_base_y + ear_radius,
-                    ],
-                    fill=color,
-                )
+            # Ears (two small circles near the top-front of the body)
+            ear_base_x = center_x + int(body_len * 0.20)
+            ear_base_y = center_y - int(body_height * 0.45)
+            # Left ear
+            draw.ellipse(
+                [
+                    ear_base_x - ear_radius - ear_radius // 2,
+                    ear_base_y - ear_radius,
+                    ear_base_x - ear_radius // 2,
+                    ear_base_y + ear_radius,
+                ],
+                fill=color,
+            )
+            # Right ear
+            draw.ellipse(
+                [
+                    ear_base_x + ear_radius // 2,
+                    ear_base_y - ear_radius,
+                    ear_base_x + ear_radius + ear_radius // 2,
+                    ear_base_y + ear_radius,
+                ],
+                fill=color,
+            )
 
-                # Whiskers (three lines per side from the nose)
-                # Left side
-                draw.line(
-                    [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy - whisker_spread)],
-                    fill=detail_color,
-                    width=max(1, tail_width - 1),
-                )
-                draw.line(
-                    [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy)],
-                    fill=detail_color,
-                    width=max(1, tail_width - 1),
-                )
-                draw.line(
-                    [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy + whisker_spread)],
-                    fill=detail_color,
-                    width=max(1, tail_width - 1),
-                )
-                # Right side (optional for symmetry; comment out if you prefer one-sided whiskers)
-                draw.line(
-                    [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy - whisker_spread)],
-                    fill=detail_color,
-                    width=max(1, tail_width - 1),
-                )
-                draw.line(
-                    [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy)],
-                    fill=detail_color,
-                    width=max(1, tail_width - 1),
-                )
-                draw.line(
-                    [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy + whisker_spread)],
-                    fill=detail_color,
-                    width=max(1, tail_width - 1),
-                )
+            # Whiskers (three lines per side from the nose)
+            # Left side
+            draw.line(
+                [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy - whisker_spread)],
+                fill=detail_color,
+                width=max(1, tail_width - 1),
+            )
+            draw.line(
+                [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy)],
+                fill=detail_color,
+                width=max(1, tail_width - 1),
+            )
+            draw.line(
+                [(nose_cx, nose_cy), (nose_cx + whisker_len, nose_cy + whisker_spread)],
+                fill=detail_color,
+                width=max(1, tail_width - 1),
+            )
+            # Right side (optional for symmetry; comment out if you prefer one-sided whiskers)
+            draw.line(
+                [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy - whisker_spread)],
+                fill=detail_color,
+                width=max(1, tail_width - 1),
+            )
+            draw.line(
+                [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy)],
+                fill=detail_color,
+                width=max(1, tail_width - 1),
+            )
+            draw.line(
+                [(nose_cx, nose_cy), (nose_cx - whisker_len, nose_cy + whisker_spread)],
+                fill=detail_color,
+                width=max(1, tail_width - 1),
+            )
 
-                # Curvy tail: start at back center, draw a gentle sine-like polyline
-                tail_start_x = body_left
-                tail_start_y = center_y
-                segments = 12
-                amp = max(2, int(body_height * 0.35))  # amplitude of the curve
-                tail_pts = []
-                for s in range(segments + 1):
-                    t = s / segments
-                    # Ease-out to taper curvature near the end
-                    x = tail_start_x - int(t * tail_len)
-                    y = tail_start_y + int(amp * 0.5 * np.sin(2 * np.pi * (t + 0.15)))
-                    tail_pts.append((x, y))
-                # Draw the polyline
-                for a, b in zip(tail_pts, tail_pts[1:]):
-                    draw.line([a, b], fill=color, width=tail_width)
+            # Curvy tail: start at back center, draw a gentle sine-like polyline
+            tail_start_x = body_left
+            tail_start_y = center_y
+            segments = 12
+            amp = max(2, int(body_height * 0.35))  # amplitude of the curve
+            tail_pts = []
+            for s in range(segments + 1):
+                t = s / segments
+                # Ease-out to taper curvature near the end
+                x = tail_start_x - int(t * tail_len)
+                y = tail_start_y + int(amp * 0.5 * np.sin(2 * np.pi * (t + 0.15)))
+                tail_pts.append((x, y))
+            # Draw the polyline
+            for a, b in zip(tail_pts, tail_pts[1:]):
+                draw.line([a, b], fill=color, width=tail_width)
 
         return draw
 
@@ -499,11 +506,10 @@ class Game(Config):
 
         # Draw players
         player_radius = 50
-        step_size = 1
         draw = self.draw_cat(draw, x_players, x_prev_players, "black",
-                                         cell_size, player_radius, step_size)
+                                         cell_size, player_radius)
         draw = self.draw_mouse(draw, o_players, o_prev_players, "grey",
-                                        cell_size, player_radius, step_size)
+                                        cell_size, player_radius)
 
         # Save stationary image
         prefix = str(prefix).zfill(3)
