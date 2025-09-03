@@ -366,8 +366,10 @@ class Player(Model, ModelNextState):
                     curiosity_bonus = np.mean((predicted_next_state[i] - next_state) ** 2)
                     reward += self._curiosity_beta * curiosity_bonus
 
-                prediction_next_state = np.amax(q_s_a_d[i][options])
-                corrected_q[action] = reward + self._discountFactor * prediction_next_state
+                q_next_state = q_s_a_d[i][options]
+                prediction_next_state = np.amax(q_next_state)
+                v_current_state = np.mean(q_next_state)
+                corrected_q[action] = reward + self._discountFactor * prediction_next_state - v_current_state
 
             corrected_qs[i] = corrected_q
 
