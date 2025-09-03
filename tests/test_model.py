@@ -1,131 +1,295 @@
 import os
-from pathlib import Path
 import numpy as np
 import pytest
-
-
-class FakeTrainingLog:
-    def __init__(self, loss=0.123):
-        self.history = {"loss": [loss]}
-
-class FakeModel:
-    def __init__(self, num_actions=4, loss=0.123):
-        self.num_actions = num_actions
-        self.saved_to = None
-        self.loaded_from = None
-        self.history = {"loss": [loss]}
-
-    def predict(self, x, verbose=0):
-        # x is typically a numpy array with shape (batch, features...)
-        # Return zeros with shape (batch, num_actions)
-        if isinstance(x, list):
-            # Handle the case a list is passed (unlikely with our stubs)
-            batch = len(x)
-        else:
-            x = np.array(x)
-            batch = 1 if x.ndim == 1 else (x.shape[0] if x.shape else 1)
-        return np.zeros((batch, self.num_actions), dtype=float)
-
-    def fit(self, x, y, epochs=1, verbose=0):
-        # Return a fake history with a positive loss
-        return FakeTrainingLog(loss=float(np.mean(np.abs(y))) if np.size(y) else 0.123)
-
-    def save_weights(self, path):
-        self.saved_to = path
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text("fake-weights")
-
-    def load_weights(self, path):
-        # Simulate loading by checking file exists
-        assert Path(path).exists(), f"checkpoint {path} should exist"
-        self.loaded_from = path
-
+from model import Model, ModelNextState
+import random
 
 @pytest.fixture
-def patched_model(monkeypatch):
-    # Patch Model.define_model to avoid importing/using the real TF backend
-    import model as model_mod
+def models():
+    return (Model(experiment='tests'),
+            Model(experiment='tests', addLSTM=True, sequenceLengthLSTM=3),
+            Model(experiment='tests', layers=[10, 10, 10]),
+            Model(experiment='tests', addLSTM=True, sequenceLengthLSTM=3, layers=[10, 10, 10]),
+            Model(experiment='tests', learningRate=0.01),)
 
-    def fake_define_model(self):
-        # Attach a lightweight fake model that mimics Keras API we need
-        self._model = FakeModel(num_actions=getattr(self, "numActions", 4))
+@pytest.fixture
+def models_next_state():
+    return (ModelNextState(experiment='tests'),
+            ModelNextState(experiment='tests', addLSTM=True, sequenceLengthLSTM=3))
 
-    monkeypatch.setattr(model_mod.Model, "define_model", fake_define_model, raising=True)
-    return model_mod
+@pytest.fixture(autouse=True)
+def set_seed():
+    # Set seeds before each test
+    random.seed(12345)
+    np.random.seed(12345)
+    yield
 
+def test_define_model_predict_one(models):
+    model1, model2, model3, model4, _ = models
 
-def test_predict_one_and_batch_shapes(patched_model):
-    # Create instance; our patched define_model will attach FakeModel
-    m = patched_model.Model(experiment="/tmp-exp", learningRate=0.001, layers=[8, 8], addLSTM=False)
-
-    # Predict one: input shape (features,) or (1, features)
-    pred1 = m.predict_one(state=[0.0, 1.0, 2.0, 3.0])
+    pred1 = model1.predict_one(state=[[0.0, 1.0, 2.0, 3.0]])
     assert isinstance(pred1, np.ndarray)
-    # Our FakeModel uses 4 actions by default, so len should be 4
-    assert pred1.shape == (4,)
+    assert pred1.shape == (model1.numActions,)
+    assert len(model1._model.layers) == len(model1._layers)*2+1
 
-    # Predict batch: N x F -> N x A, squeezed by implementation
-    X = np.random.rand(5, 4)
-    predB = m.predict_batch(X)
-    assert isinstance(predB, np.ndarray)
-    assert predB.shape == (5, 4)
+    state = [list(range(model2.numStates))]
+    samples = [[state[0],0]] * 10
+    last_x_minus_1_samples = samples[(model2._sequence_length_LSTM * -1 + 1):]
+    pred2 = model2.predict_one(state=[s[0] for s in last_x_minus_1_samples] + state)
+    assert isinstance(pred2, np.ndarray)
+    assert pred2.shape == (model2.numActions,)
+    assert len(model2._model.layers) == ((len(model2._layers)-1)*2)+2
 
+    pred3 = model3.predict_one(state=[[0.0, 1.0, 2.0, 3.0]])
+    assert isinstance(pred3, np.ndarray)
+    assert pred3.shape == (model3.numActions,)
+    assert len(model3._model.layers) == len(model3._layers)*2+1
 
-def test_train_batch_updates_losses_and_returns_summary(patched_model):
-    m = patched_model.Model(experiment="/tmp-exp", learningRate=0.001, layers=[8, 8], addLSTM=False)
-
-    # Prepare a tiny batch
-    X = np.random.rand(10, 4).astype(float)
-    Y = np.random.rand(10, 4).astype(float)
-
-    before = len(m._losses)
-    summary = m.train_batch(X, Y, step=42)
-    after = len(m._losses)
-
-    assert after == before + 1, "train_batch should append exactly one loss"
-    assert isinstance(summary, dict)
-    assert {"name", "value", "step"} <= set(summary.keys())
-    assert summary["name"] == "params/losses"
-    assert summary["step"] == 42
-    assert isinstance(summary["value"], float)
+    state = [list(range(model4.numStates))]
+    samples = [[state[0],0]] * 10
+    last_x_minus_1_samples = samples[(model2._sequence_length_LSTM * -1 + 1):]
+    pred4 = model4.predict_one(state=[s[0] for s in last_x_minus_1_samples] + state)
+    assert isinstance(pred4, np.ndarray)
+    assert pred4.shape == (model4.numActions,)
+    assert len(model4._model.layers) == ((len(model4._layers)-1)*2)+2
 
 
-def test_save_and_load_checkpoint(tmp_path, patched_model):
-    m = patched_model.Model(experiment="/exp-test", learningRate=0.001, layers=[8, 8], addLSTM=False)
+def test_predict_batch(models):
+    model1, model2, model3, model4, _ = models
 
-    # Build the expected checkpoint directory under cwd + experiment + ...
-    cwd = Path(os.getcwd())
-    # Model.save_checkpoint expects .../{experiment}/checkpoints/{name}/{phase}/cp-XXXXXX.weights.h5
-    name = "unit-model"
-    phase = "part1"
-    checkpoint_dir = cwd / "exp-test" / "checkpoints" / name / phase
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    pred1 = model1.predict_batch(states=[[0.0, 1.0, 2.0, 3.0],
+                                         [0.0, 1.0, 2.0, 3.0],
+                                         [0.0, 1.0, 2.0, 3.0]])
+    assert isinstance(pred1, np.ndarray)
+    assert pred1.shape == (3, model1.numActions)
+    assert len(model1._model.layers) == len(model1._layers)*2+1
 
-    # Save weights
-    m.save_checkpoint(m._model, cnt=1, name=name, training_phase=phase)
-    expected_file = checkpoint_dir / "cp-000001.weights.h5"
-    assert expected_file.exists(), "Checkpoint file should be created by save_checkpoint"
+    states = [[list(range(model2.numStates))]*3]*model2.batchSize
+    pred2 = model2.predict_batch(states=np.array(states))
+    assert isinstance(pred2, np.ndarray)
+    assert pred2.shape == (model2.batchSize,model2.numActions)
+    assert len(model2._model.layers) == ((len(model2._layers)-1)*2)+2
 
-    # Load weights back
-    m.load_checkpoint(str(expected_file))
-    assert getattr(m._model, "loaded_from", None) == str(expected_file), "Fake model should record the loaded path"
+    pred3 = model3.predict_batch(states=[[0.0, 1.0, 2.0, 3.0],
+                                         [0.0, 1.0, 2.0, 3.0],
+                                         [0.0, 1.0, 2.0, 3.0]])
+    assert isinstance(pred3, np.ndarray)
+    assert pred3.shape == (3, model1.numActions)
+    assert len(model3._model.layers) == len(model3._layers)*2+1
+
+    states = [[list(range(model4.numStates))]*3]*model4.batchSize
+    pred4 = model4.predict_batch(states=np.array(states))
+    assert isinstance(pred4, np.ndarray)
+    assert pred4.shape == (model4.batchSize,model4.numActions)
+    assert len(model4._model.layers) == ((len(model4._layers)-1)*2)+2
 
 
-def test_predict_with_lstm_disabled_by_default(patched_model):
-    # Ensure default addLSTM=False path is used and no reshaping errors occur
-    m = patched_model.Model(experiment="/tmp-exp")
-    out = m.predict_one([1, 2, 3])
-    assert out.shape == (4,)
+def test_train_batch(models):
+    model1, model2, model3, model4, model5 = models
+
+    # Case 1
+    x_batch = np.array([list(range(model1.numStates))]*model1.batchSize)
+    y_batch = np.array([list(range(model1.numActions))]*model1.batchSize)
+
+    prediction1 = model1.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction1.shape
+    prediction1_err = np.sum(np.abs(y_batch-prediction1))
+
+    tb = model1.train_batch(x_batch=x_batch, y_batch=y_batch, step=1)
+    assert tb == {'name': 'params/losses', 'value': 23.5631, 'step': 1}
+    assert model1._losses == [23.56310272216797]
+
+    prediction2 = model1.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction2.shape
+    prediction2_err = np.sum(np.abs(y_batch-prediction2))
+    assert prediction1_err > prediction2_err
+    assert (prediction1_err-prediction2_err)/prediction1_err == 0.00640537188287323
+
+    # Case 2
+    x_batch = np.array([[list(range(model2.numStates))]*3]*model2.batchSize).astype(float)
+    y_batch = np.array([list(range(model2.numActions))]*model2.batchSize).astype(float)
+
+    prediction1 = model2.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction1.shape
+    prediction1_err = np.sum(np.abs(y_batch-prediction1))
+
+    tb = model2.train_batch(x_batch=x_batch, y_batch=y_batch, step=2)
+    assert tb == {'name': 'params/losses', 'value': 22.39533, 'step': 2}
+    assert model2._losses == [22.395326614379883]
+
+    prediction2 = model2.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction2.shape
+    prediction2_err = np.sum(np.abs(y_batch-prediction2))
+    assert prediction1_err > prediction2_err
+    assert (prediction1_err-prediction2_err)/prediction1_err == 0.004100450231961105
+
+    # Case 3
+    x_batch = np.array([list(range(model3.numStates))]*model3.batchSize)
+    y_batch = np.array([list(range(model3.numActions))]*model3.batchSize)
+
+    prediction1 = model3.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction1.shape
+    prediction1_err = np.sum(np.abs(y_batch-prediction1))
+
+    tb = model3.train_batch(x_batch=x_batch, y_batch=y_batch, step=3)
+    assert tb == {'name': 'params/losses', 'value': 28.58597, 'step': 3}
+    assert model3._losses == [28.585973739624023]
+
+    prediction2 = model3.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction2.shape
+    prediction2_err = np.sum(np.abs(y_batch-prediction2))
+    assert prediction1_err > prediction2_err
+    assert (prediction1_err-prediction2_err)/prediction1_err == 0.0017196189773672856
+
+    # Case 4
+    x_batch = np.array([[list(range(model2.numStates))]*3]*model2.batchSize).astype(float)
+    y_batch = np.array([list(range(model2.numActions))]*model2.batchSize).astype(float)
+
+    prediction1 = model4.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction1.shape
+    prediction1_err = np.sum(np.abs(y_batch-prediction1))
+
+    tb = model4.train_batch(x_batch=x_batch, y_batch=y_batch, step=4)
+    assert tb == {'name': 'params/losses', 'value': 22.56413, 'step': 4}
+    assert model4._losses == [22.564132690429688]
+
+    prediction2 = model4.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction2.shape
+    prediction2_err = np.sum(np.abs(y_batch-prediction2))
+    assert prediction1_err > prediction2_err
+    assert (prediction1_err-prediction2_err)/prediction1_err == 0.0007378582012387377
+
+    # Case 5
+    x_batch = np.array([list(range(model5.numStates))]*model5.batchSize)
+    y_batch = np.array([list(range(model5.numActions))]*model5.batchSize)
+
+    prediction1 = model5.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction1.shape
+    prediction1_err = np.sum(np.abs(y_batch-prediction1))
+
+    tb = model5.train_batch(x_batch=x_batch, y_batch=y_batch, step=5)
+    assert tb == {'name': 'params/losses', 'value': 21.10648, 'step': 5}
+    assert model5._losses == [21.106477737426758]
+
+    prediction2 = model5.predict_batch(states=x_batch)
+    assert y_batch.shape == prediction2.shape
+    prediction2_err = np.sum(np.abs(y_batch-prediction2))
+    assert prediction1_err > prediction2_err
+    assert round((prediction1_err-prediction2_err)/prediction1_err,3) == 0.400
 
 
-def test_multiple_calls_increase_coverage_paths(patched_model):
-    # Exercise predict_batch path with float casting branch and multiple calls
-    m = patched_model.Model(experiment="/tmp-exp", addLSTM=False)
-    X1 = np.ones((2, 3))
-    X2 = np.array([[0.1, 0.2, 0.3]], dtype=float)
+def test_save_checkpoint(models):
+    model1, _, _, _, _ = models
+    x_batch = np.array([list(range(model1.numStates))]*model1.batchSize)
+    model1.predict_batch(states=x_batch)
+    os.makedirs(os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1'), exist_ok=True)
+    model1.save_checkpoint(1, 'testplayer', 'phase1')
+    assert 'cp-000001.weights.h5' in os.listdir(os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1'))
 
-    y1 = m.predict_batch(X1)
-    y2 = m.predict_batch(X2)
 
-    assert y1.shape == (2, 4)
-    assert y2.shape == (1, 4)
+def test_load_checkpoint(models):
+    model1, _, _, _, _ = models
+    x_batch = np.array([list(range(model1.numStates))]*model1.batchSize)
+    model1.predict_batch(states=x_batch)
+    os.makedirs(os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1'), exist_ok=True)
+    weights_before = model1._model.weights
+    model1.save_checkpoint(1, 'testplayer', 'phase1')
+    model1._model.load_weights(os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1', 'cp-000001.weights.h5'))
+    weights_after = model1._model.weights
+    assert weights_before == weights_after
+
+
+def test_define_model_predict_one_next_state(models_next_state):
+    model1, model2 = models_next_state
+
+    pred1 = model1.predict_one_next_state(state=[[0.0, 1.0, 2.0, 3.0]])
+    assert isinstance(pred1, np.ndarray)
+    assert pred1.shape == (model1.numStates,)
+    assert len(model1._model_next_state.layers) == len(model1._layers_next_state) * 2 + 1
+
+    state = [list(range(model2.numStates))]
+    samples = [[state[0], 0]] * 10
+    last_x_minus_1_samples = samples[(model2._sequence_length_LSTM * -1 + 1):]
+    pred2 = model2.predict_one_next_state(state=[s[0] for s in last_x_minus_1_samples] + state)
+    assert isinstance(pred2, np.ndarray)
+    assert pred2.shape == (model2._sequence_length_LSTM, model2.numStates)
+    assert len(model2._model_next_state.layers) == (len(model2._layers_next_state) * 2) + 1
+
+
+def test_predict_batch_next_state(models_next_state):
+    model1, model2 = models_next_state
+
+    pred1 = model1.predict_batch_next_state(states=[[0.0, 1.0, 2.0, 3.0],
+                                                    [0.0, 1.0, 2.0, 3.0],
+                                                    [0.0, 1.0, 2.0, 3.0]])
+    assert isinstance(pred1, np.ndarray)
+    assert pred1.shape == (3, model1.numStates)
+    assert len(model1._model_next_state.layers) == len(model1._layers_next_state) * 2 + 1
+
+    states = [[list(range(model2.numStates))] * model2._sequence_length_LSTM] * model2.batchSize
+    pred2 = model2.predict_batch_next_state(states=np.array(states))
+    assert isinstance(pred2, np.ndarray)
+    assert pred2.shape == (model2.batchSize, model2._sequence_length_LSTM, model2.numStates)
+    assert len(model2._model_next_state.layers) == (len(model2._layers_next_state) * 2) + 1
+
+
+def test_train_batch_next_state(models_next_state):
+    model1, model2 = models_next_state
+
+    # Case 1
+    x_batch = np.array([list(range(model1.numStates))] * model1.batchSize)
+    y_batch = np.array([list(range(model1.numStates))] * model1.batchSize)
+
+    prediction1 = model1.predict_batch_next_state(states=x_batch)
+    assert y_batch.shape == prediction1.shape
+    prediction1_err = np.sum(np.abs(y_batch - prediction1))
+
+    tb = model1.train_batch_next_state(x_batch=x_batch, y_batch=y_batch, step=1)
+    assert tb == {'name': 'params/losses-next-state', 'value': 6.71815, 'step': 1}
+    assert model1._losses_next_state == [6.7181477546691895]
+
+    prediction2 = model1.predict_batch_next_state(states=x_batch)
+    assert y_batch.shape == prediction2.shape
+    prediction2_err = np.sum(np.abs(y_batch - prediction2))
+    assert prediction1_err > prediction2_err
+    assert (prediction1_err - prediction2_err) / prediction1_err == 0.10701045583093437
+
+    # Case 2
+    x_batch = np.array([[list(range(model2.numStates))] * 3] * model2.batchSize).astype(float)
+    y_batch = np.array([list(range(model2.numStates))] * model2.batchSize).astype(float)
+
+    prediction1 = model2.predict_batch_next_state(states=x_batch)
+    assert y_batch.shape == prediction1.shape
+    prediction1_err = np.sum(np.abs(y_batch - prediction1))
+
+    tb = model2.train_batch_next_state(x_batch=x_batch, y_batch=y_batch, step=2)
+    assert tb == {'name': 'params/losses-next-state', 'value': 9.25949, 'step': 2}
+    assert model2._losses_next_state == [9.259491920471191]
+
+    prediction2 = model2.predict_batch_next_state(states=x_batch)
+    assert y_batch.shape == prediction2.shape
+    prediction2_err = np.sum(np.abs(y_batch - prediction2))
+    assert prediction1_err > prediction2_err
+    assert (prediction1_err - prediction2_err) / prediction1_err == 0.07853682469434878
+
+
+def test_save_checkpoint_next_state(models_next_state):
+    model1, _ = models_next_state
+    x_batch = np.array([list(range(model1.numStates))] * model1.batchSize)
+    model1.predict_batch_next_state(states=x_batch)
+    os.makedirs(os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1'), exist_ok=True)
+    model1.save_checkpoint_next_state(1, 'testplayer', 'phase1')
+    assert 'cp-000001-next-state.weights.h5' in os.listdir(os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1'))
+
+
+def test_load_checkpoint_next_state(models_next_state):
+    model1, _ = models_next_state
+    x_batch = np.array([list(range(model1.numStates))] * model1.batchSize)
+    model1.predict_batch_next_state(states=x_batch)
+    os.makedirs(os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1'), exist_ok=True)
+    weights_before = model1._model_next_state.weights
+    model1.save_checkpoint_next_state(1, 'testplayer', 'phase1')
+    model1._model_next_state.load_weights(
+        os.path.join(os.getcwd(), 'tests', 'checkpoints', 'testplayer', 'phase1', 'cp-000001-next-state.weights.h5'))
+    weights_after = model1._model_next_state.weights
+    assert weights_before == weights_after

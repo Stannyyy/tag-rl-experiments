@@ -62,8 +62,8 @@ class Moderator(Config):
             self._game.save(prefix=str(self._turn_count))
 
         # Start game
-        game_not_over = True
-        while game_not_over:
+        game_over = False
+        while game_over == False:
 
             # Determine next state
             self.next_turn()
@@ -71,15 +71,15 @@ class Moderator(Config):
             player.options = self._game.what_options(self._turn)
 
             # Set new player state
-            player.set_state(self._game._x_list,
-                             self._game._y_list,
-                             self._turn,
-                             self._game._taggers[self._turn])
+            player.state = (self._game._x_list,
+                            self._game._y_list,
+                            self._turn,
+                            self._game._taggers[self._turn])
 
             if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
                 player.update_sample(player.options)
-                player.add_sample(self._game._tag_happened, game_not_over)
+                player.add_corrected_sample(self._game._tag_happened)
 
             # Make a move! Unless a tag has happened or the game has reached maximum turns
             if self._game._ended > 0:
@@ -102,7 +102,7 @@ class Moderator(Config):
             else:
                 player._tot_reward_runner += reward
             if learn:
-                player.set_sample(choice, reward)
+                player.sample = (choice, reward)
 
             # Write if save video
             if save_game:
@@ -113,7 +113,7 @@ class Moderator(Config):
                 self._game._ended += 1
                 player.options = self._game.what_options(self._turn)
 
-            game_not_over = self._game._ended < self.numPlayers
+            game_over = self._game._ended >= self.numPlayers
 
         # Create video
         if save_game:
@@ -131,9 +131,8 @@ class Moderator(Config):
                 else:
                     player.update_sample(player.options)
 
-                # Finalize sample buffer
-                player.add_sample(self._game._tag_happened, game_not_over)
-                player.finalize_sample_buffer(self._game._tag_happened, game_not_over)
+                # Add last sample
+                player.add_corrected_sample(self._game._tag_happened)
 
                 # Learn!
                 player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))

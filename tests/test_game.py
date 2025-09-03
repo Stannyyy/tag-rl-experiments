@@ -108,7 +108,7 @@ def test_change_position(game):
 
 def test_move(game):
     mid_i = int(game.gridSize/2)
-    if game.gridSize >= 7:
+    if game.gridSize < 7:
         raise Exception("Expected results for game.gridSize smaller than 7 is missing")
 
     game._x_list = [mid_i, mid_i]
@@ -155,19 +155,19 @@ def test_what_reward(game):
     assert game.what_reward(0, 1) == -1 - 0.25
     assert game.what_reward(0, 2) == -1 - 0.25
     assert game.what_reward(0, 3) == -1 - 0.25
-    assert game.what_reward(0, 4) == -1 - (0.25**2*2)**0.5
-    assert game.what_reward(0, 5) == -1 - (0.25**2*2)**0.5
-    assert game.what_reward(0, 6) == -1 - (0.25**2*2)**0.5
-    assert game.what_reward(0, 7) == -1 - (0.25**2*2)**0.5
+    assert game.what_reward(0, 4) == round(-1 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(0, 5) == round(-1 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(0, 6) == round(-1 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(0, 7) == round(-1 - (0.25**2*2)**0.5, 2)
     assert game.what_reward(0, 8) == -1
     assert game.what_reward(1, 0) == 1 - 0.25
     assert game.what_reward(1, 1) == 1 - 0.25
     assert game.what_reward(1, 2) == 1 - 0.25
     assert game.what_reward(1, 3) == 1 - 0.25
-    assert game.what_reward(1, 4) == 1 - (0.25**2*2)**0.5
-    assert game.what_reward(1, 5) == 1 - (0.25**2*2)**0.5
-    assert game.what_reward(1, 6) == 1 - (0.25**2*2)**0.5
-    assert game.what_reward(1, 7) == 1 - (0.25**2*2)**0.5
+    assert game.what_reward(1, 4) == round(1 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(1, 5) == round(1 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(1, 6) == round(1 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(1, 7) == round(1 - (0.25**2*2)**0.5, 2)
     assert game.what_reward(1, 8) == 1
 
     game._x_list = [min_i, min_i]
@@ -177,19 +177,19 @@ def test_what_reward(game):
     assert game.what_reward(0, 1) == -50 - 0.25
     assert game.what_reward(0, 2) == -50 - 0.25
     assert game.what_reward(0, 3) == -50 - 0.25
-    assert game.what_reward(0, 4) == -50 - (0.25**2*2)**0.5
-    assert game.what_reward(0, 5) == -50 - (0.25**2*2)**0.5
-    assert game.what_reward(0, 6) == -50 - (0.25**2*2)**0.5
-    assert game.what_reward(0, 7) == -50 - (0.25**2*2)**0.5
+    assert game.what_reward(0, 4) == round(-50 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(0, 5) == round(-50 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(0, 6) == round(-50 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(0, 7) == round(-50 - (0.25**2*2)**0.5, 2)
     assert game.what_reward(0, 8) == -50
     assert game.what_reward(1, 0) == 50 - 0.25
     assert game.what_reward(1, 1) == 50 - 0.25
     assert game.what_reward(1, 2) == 50 - 0.25
     assert game.what_reward(1, 3) == 50 - 0.25
-    assert game.what_reward(1, 4) == 50 - (0.25**2*2)**0.5
-    assert game.what_reward(1, 5) == 50 - (0.25**2*2)**0.5
-    assert game.what_reward(1, 6) == 50 - (0.25**2*2)**0.5
-    assert game.what_reward(1, 7) == 50 - (0.25**2*2)**0.5
+    assert game.what_reward(1, 4) == round(50 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(1, 5) == round(50 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(1, 6) == round(50 - (0.25**2*2)**0.5, 2)
+    assert game.what_reward(1, 7) == round(50 - (0.25**2*2)**0.5, 2)
     assert game.what_reward(1, 8) == 50
 
 def test_render(game):

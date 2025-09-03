@@ -31,7 +31,8 @@ def find_device():
 # Model game
 class Model(Config):
 
-    def __init__(self, experiment="defaultname", model=None, learningRate=0.0001, layers=[50, 50], addLSTM=False):
+    def __init__(self, experiment="defaultname", model=None, learningRate=0.0001, layers=[50, 50],
+                 addLSTM=False, sequenceLengthLSTM=1):
 
         # Import config
         Config.__init__(self)
@@ -44,6 +45,7 @@ class Model(Config):
         self._layers = layers
         self._model = model if model is not None else None
         self._add_LSTM = addLSTM
+        self._sequence_length_LSTM = sequenceLengthLSTM
 
         # Define the placeholders
         self._states = None
@@ -77,10 +79,8 @@ class Model(Config):
                 else:
                     # Dense layers with number of units defined by self._layers
                     # PReLU is leaky relu of which alpha is learned
-                    # layers += [tf.keras.layers.Dense(layer),
-                    #            tf.keras.layers.PReLU()]
-                    layers += [tf.keras.layers.Dense(layer,
-                                               activation=tf.keras.layers.LeakyReLU(alpha=0.1))]
+                    layers += [tf.keras.layers.Dense(layer),
+                               tf.keras.layers.PReLU()]
 
             # Finalize with an output layer to predict the Q values for all the different actions
             layers += [tf.keras.layers.Dense(self.numActions, activation='linear')]
@@ -100,7 +100,7 @@ class Model(Config):
 
         # If addLSTM is enabled, reshape the state into one that can be used by the LSTM layer of the model
         if self._add_LSTM:
-            state = np.array(state).reshape(1, self._sequence_length, self.numStates)
+            state = np.array(state).astype(float).reshape(1, self._sequence_length_LSTM, self.numStates)
 
         # Predict Q values
         prediction = self._model.predict(state, verbose=0)
@@ -119,8 +119,8 @@ class Model(Config):
             return self.predict_one(states[0])
 
         # Prep for LSTM if necessary
-        if self._add_LSTM: # !!! Why is this again?
-            states = states.astype(float)
+        if self._add_LSTM:
+            states = states.astype(float).reshape((self.batchSize, self._sequence_length_LSTM, self.numStates))
 
         # Predict Q values
         predictions = self._model.predict(states, verbose=0)
@@ -146,14 +146,14 @@ class Model(Config):
             "step": step
         }
 
-    def save_checkpoint(self, model, cnt, name, training_phase):
+    def save_checkpoint(self, cnt, name, training_phase):
         """
         Save model weights
         """
 
         # Save weights
         checkpoint_path = os.path.join(os.getcwd(), self._experiment, 'checkpoints', name, training_phase)
-        model.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}.weights.h5'))
+        self._model.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}.weights.h5'))
 
     def load_checkpoint(self, path):
         """
@@ -164,15 +164,22 @@ class Model(Config):
         self._model.load_weights(path)
 
 # When using a curiosity bonus, we need a model to predict the next state
-class ModelNextState():
+class ModelNextState(Config):
 
-    def __init__(self, modelNextState=None, addLSTM=False):
+    def __init__(self, experiment="defaultName", modelNextState=None, addLSTM=False, sequenceLengthLSTM=1):
+
+        # Import config
+        Config.__init__(self)
+
+        # Experiment name
+        self._experiment = experiment
 
         # Define model
         self._learning_rate_next_state = 0.001  # formerly alpha
         self._layers_next_state = [50,50]
         self._model_next_state = modelNextState if modelNextState is not None else None
         self._add_LSTM = addLSTM
+        self._sequence_length_LSTM = sequenceLengthLSTM
 
         # Set up the models
         self.define_model_next_state()
@@ -190,10 +197,14 @@ class ModelNextState():
         with find_device():
             layers = []
             for layer_nr, layer in enumerate(self._layers_next_state):
-                # Dense layers with number of units defined by self._layers
-                # PReLU is leaky relu of which alpha is learned
-                layers += [tf.keras.layers.Dense(layer),
-                           tf.keras.layers.PReLU()]
+                if self._add_LSTM and (layer_nr == 0):
+                    # LSTM as the first layer when addLSTM is enabled
+                    layers += [tf.keras.layers.LSTM(units=layer)]
+                else:
+                    # Dense layers with number of units defined by self._layers
+                    # PReLU is leaky relu of which alpha is learned
+                    layers += [tf.keras.layers.Dense(layer),
+                               tf.keras.layers.PReLU()]
 
             # Finalize with an output layer to predict the next state values
             layers += [tf.keras.layers.Dense(self.numStates, activation='linear')]
@@ -213,7 +224,7 @@ class ModelNextState():
 
         # If addLSTM is enabled, reshape the state into one that can be used by the LSTM layer of the model
         if self._add_LSTM:
-            state = np.array(state).reshape(1, self._sequence_length, self.numStates)
+            state = np.array(state).reshape(1, self._sequence_length_LSTM, self.numStates)
 
         # Predict next state values
         prediction = self._model_next_state.predict(state, verbose=0)
@@ -232,8 +243,8 @@ class ModelNextState():
             return self.predict_one_next_state(states[0])
 
         # Prep for LSTM if necessary
-        if self._add_LSTM: # !!! Why is this again?
-            states = states.astype(float)
+        if self._add_LSTM:
+            states = states.astype(float).reshape((self.batchSize, self._sequence_length_LSTM, self.numStates))
 
         # Predict next state values
         predictions = self._model_next_state.predict(states, verbose=0)
@@ -259,14 +270,14 @@ class ModelNextState():
                 "step": step
              }
 
-    def save_checkpoint_next_state(self, model, cnt, name, training_phase):
+    def save_checkpoint_next_state(self, cnt, name, training_phase):
         """
         Save model weights
         """
 
         # Save weights
         checkpoint_path = os.path.join(os.getcwd(), self._experiment, 'checkpoints', name, training_phase)
-        model.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}-next-state.weights.h5'))
+        self._model_next_state.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}-next-state.weights.h5'))
 
     def load_checkpoint_next_state(self, path):
         """

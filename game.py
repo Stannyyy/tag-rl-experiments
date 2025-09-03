@@ -185,7 +185,7 @@ class Game(Config):
                 self._ended += 1
                 self._tag_happened = True
 
-        return reward
+        return round(reward, 2)
 
     def render(self, prediction=None, state=None, display=False, size=5):
 

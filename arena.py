@@ -85,9 +85,9 @@ class Arena(Config):
 
                 # Save model
                 if p._test_mode == False:
-                    p.save_checkpoint(p.model, self.cnt, p.name, self.training_phase)
+                    p.save_checkpoint(self.cnt, p.name, self.training_phase)
                     if p._curiosity:
-                        p.save_checkpoint_next_state(p.model_next_state, self.cnt, p.name, self.training_phase)
+                        p.save_checkpoint_next_state(self.cnt, p.name, self.training_phase)
                 p.write_summary_to_tensorboard()
 
                 # Save status

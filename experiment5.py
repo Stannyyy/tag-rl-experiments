@@ -33,9 +33,6 @@ class Experiment():
         p07 = Player(experiment, name='Pietje Puk with exploration with large curiosity', curiosity=True, curiosity_beta=1, maxEpsilon=1)
         self._players = [p00, p02, p01, p03, p04, p05, p06, p07]
 
-        # Initialize record of completed parts
-        self._training_done, self._competition_done = self.admin_of_completed_tasks()
-
         # Initialize results paths
         experiment_path = os.path.join(os.getcwd(), experiment)
         os.makedirs(experiment_path, exist_ok=True)
@@ -58,6 +55,9 @@ class Experiment():
                 os.makedirs(os.path.join(experiment_path, 'checkpoints', name, training_phase), exist_ok=True)
             for competition_phase in [p.name for p in self._players]:
                 os.makedirs(os.path.join(experiment_path, 'competition', name, competition_phase), exist_ok=True)
+
+        # Initialize record of completed parts
+        self._training_done, self._competition_done = self.admin_of_completed_tasks()
 
     def admin_of_completed_tasks(self):
         training_done = []
@@ -105,6 +105,9 @@ class Experiment():
                 # Update admin
                 self._training_done, self._competition_done = self.admin_of_completed_tasks()
 
+            if all(self._competition_done[ix]):
+                pass
+            else:
                 for icomp, comp_done in enumerate(self._competition_done[ix]):
                     # Compete against all players who completed training and whom the current player did not yet play against
                     if (comp_done is False) and (self._training_done[ix] is True) and (self._training_done[icomp] is True):
@@ -121,7 +124,7 @@ class Experiment():
                         print(f"{ps[0].name} is competing against {ps[1].name}")
                         mdrtr = Moderator(ps, experiment=self._experiment)
                         arn = Arena(mdrtr, training_phase="part2")
-                        arn.competition(100)
+                        arn.competition(1000)
 
                         results = {'player1': ps[0].name, 'player2': ps[1].name, 'start_time': start, 'end_time': datetime.datetime.now().strftime('%Y%m%d-%H%M')}
                         for i, p in enumerate(unique_players):
