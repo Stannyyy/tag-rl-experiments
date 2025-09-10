@@ -24,14 +24,18 @@ class Experiment():
 
         # Player definition
         p00 = Player(experiment, name='Pietje Puk with exploration', maxEpsilon=1)
-        p01 = Player(experiment, name='Pietje Puk with small curiosity', curiosity=True, curiosity_beta=0.01, maxEpsilon=0.01)
-        p02 = Player(experiment, name='Pietje Puk with medium curiosity', curiosity=True, curiosity_beta=0.1, maxEpsilon=0.01)
-        p03 = Player(experiment, name='Pietje Puk with large curiosity', curiosity=True, curiosity_beta=1, maxEpsilon=0.01)
-        p04 = Player(experiment, name='Pietje Puk without exploration', maxEpsilon=0.01)
-        p05 = Player(experiment, name='Pietje Puk with exploration with small curiosity', curiosity=True, curiosity_beta=0.01, maxEpsilon=1)
-        p06 = Player(experiment, name='Pietje Puk with exploration with medium curiosity', curiosity=True, curiosity_beta=0.1, maxEpsilon=1)
-        p07 = Player(experiment, name='Pietje Puk with exploration with large curiosity', curiosity=True, curiosity_beta=1, maxEpsilon=1)
-        self._players = [p00, p02, p01, p03, p04, p05, p06, p07]
+        # p01 = Player(experiment, name='Pietje Puk with small curiosity', curiosity=True, curiosity_beta=0.01, maxEpsilon=0.01)
+        # p02 = Player(experiment, name='Pietje Puk with medium curiosity', curiosity=True, curiosity_beta=0.1, maxEpsilon=0.01)
+        # p03 = Player(experiment, name='Pietje Puk with large curiosity', curiosity=True, curiosity_beta=1, maxEpsilon=0.01)
+        # p04 = Player(experiment, name='Pietje Puk without exploration', maxEpsilon=0.01)
+        # p05 = Player(experiment, name='Pietje Puk with exploration with small curiosity', curiosity=True, curiosity_beta=0.01, maxEpsilon=1)
+        # p06 = Player(experiment, name='Pietje Puk with exploration with medium curiosity', curiosity=True, curiosity_beta=0.1, maxEpsilon=1)
+        # p07 = Player(experiment, name='Pietje Puk with exploration with large curiosity', curiosity=True, curiosity_beta=1, maxEpsilon=1)
+        p08 = Player(experiment, name='Pietje Puk with exploration & selection', maxEpsilon=1)
+        p09 = Player(experiment, name='Pietje Puk with temperature', maxEpsilon=1, useProbabilities=True)
+        p10 = Player(experiment, name='Pietje Puk with temperature explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.00001)
+
+        self._players = [p00, p08, p09, p10] #[p00, p02, p01, p03, p04, p05, p06, p07]
 
         # Initialize results paths
         experiment_path = os.path.join(os.getcwd(), experiment)
@@ -86,9 +90,7 @@ class Experiment():
         for ix, p in enumerate(self._players):
             print(p.name)
 
-            if self._training_done[ix]:
-                pass
-            else:
+            if self._training_done[ix] is False:
 
                 # If there is an existing training, continue there
                 if os.path.exists(p._state_path):
@@ -105,9 +107,7 @@ class Experiment():
                 # Update admin
                 self._training_done, self._competition_done = self.admin_of_completed_tasks()
 
-            if all(self._competition_done[ix]):
-                pass
-            else:
+            if all(self._competition_done[ix]) == False:
                 for icomp, comp_done in enumerate(self._competition_done[ix]):
                     # Compete against all players who completed training and whom the current player did not yet play against
                     if (comp_done is False) and (self._training_done[ix] is True) and (self._training_done[icomp] is True):
@@ -142,4 +142,8 @@ class Experiment():
                         df = pd.DataFrame(results, index=[0])
                         df.to_csv(os.path.join(os.getcwd(), self._experiment, 'competition', ps[0].name, ps[1].name, 'results.csv'), index=False)
                         df.to_csv(os.path.join(os.getcwd(), self._experiment, 'competition', ps[1].name, ps[0].name, 'results.csv'), index=False)
-                sys.exit()
+
+        # Update admin
+        self._training_done, self._competition_done = self.admin_of_completed_tasks()
+        if all(self._training_done) and all([all(c) for c in self._competition_done]):
+            sys.exit(1)

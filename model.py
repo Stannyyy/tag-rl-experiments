@@ -32,10 +32,14 @@ def find_device():
 class Model(Config):
 
     def __init__(self, experiment="defaultname", model=None, learningRate=0.0001, layers=[50, 50],
-                 addLSTM=False, sequenceLengthLSTM=1):
+                 addLSTM=False, sequenceLengthLSTM=1, numStatesOverwrite=None, numActionsOverwrite=None):
 
         # Import config
         Config.__init__(self)
+        if numStatesOverwrite is not None:
+            self.numStates = numStatesOverwrite
+        if numActionsOverwrite is not None:
+            self.numActions = numActionsOverwrite
 
         # Experiment name
         self._experiment = experiment

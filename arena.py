@@ -44,8 +44,7 @@ class Arena(Config):
                 self.stop_stopwatch()
 
             # Print progress
-            self.end = time.time()
-            print('\nRound', self.cnt-1, 'out of', self.numEpisodes, round(self.end - self.stt), 'sec elapsed')
+            print('\nRound', self.cnt-1, 'out of', self.numEpisodes, self.total_time, 'sec elapsed')
 
             unique_players = list(set(self.modertr.players))
             for player in unique_players:
@@ -76,8 +75,6 @@ class Arena(Config):
             # Save models
             self.save_status()
 
-            # Start new timer
-            self.stt = time.time()
 
     def save_status(self):
         for p in self.modertr.players:

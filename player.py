@@ -21,11 +21,12 @@ class Player(Model, ModelNextState):
     def __init__(self, experiment, name, bootstrapValueEpsilon=0.0005, discountFactor=0.975,
                  learningRate=0.001, layers=[100, 100, 100], addLSTM=False, sequenceLengthLSTM=1,
                  render=False, justLike=None, testMode=False, curiosity=False, curiosity_beta=0,
-                 maxEpsilon=None):
+                 maxEpsilon=None, useProbabilities=False, numStatesOverwrite=None, numActionsOverwrite=None):
 
         # Import models
         Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers,
-                       addLSTM=addLSTM, sequenceLengthLSTM=sequenceLengthLSTM)
+                       addLSTM=addLSTM, sequenceLengthLSTM=sequenceLengthLSTM,
+                       numStatesOverwrite=numStatesOverwrite, numActionsOverwrite=numActionsOverwrite)
         if curiosity:
             ModelNextState.__init__(self, experiment=experiment, addLSTM=addLSTM, sequenceLengthLSTM=sequenceLengthLSTM)
 
@@ -33,6 +34,9 @@ class Player(Model, ModelNextState):
         self._name = name if justLike is None else justLike._name + name
         self.isRandom = False
         self.isStill = False
+
+        # Player variables
+        self._use_probabilities = useProbabilities
 
         # Model variables
         self._eps = self.maxEpsilon if justLike is None else justLike._eps
@@ -81,6 +85,41 @@ class Player(Model, ModelNextState):
         self._summary_writer = tf.summary.create_file_writer(self._log_path)
         self._summary_writer_collection = []
 
+    def prediction_to_probabilities(self, prediction):
+        """
+        Convert q predictions to probabilities that sum to 1 over finite entries.
+        -inf entries get probability 0.
+        temperature > 1.0 => flatter distribution
+        temperature < 1.0 => sharper distribution
+
+        It is basically normalization then softmax with temperature.
+        """
+
+        temperature = self._eps * 100
+        if temperature <= 0:
+            raise ValueError("temperature must be > 0")
+
+        # Filter infinite values (not an option)
+        probs = np.asarray(prediction, dtype=float)
+        mask = np.isfinite(probs)
+
+        # Normalize
+        probs[mask] -= np.mean(probs[mask])
+        if sum(mask) == 1:
+            probs[mask] = 1
+        elif sum(mask) == 0:
+            raise ValueError("no finite values")
+        else:
+            probs[mask] /= np.std(probs[mask])
+
+        # Stable softmax on finite entries
+        probs[mask] = np.exp(probs[mask] / temperature)
+        probs[mask] = probs[mask] / np.sum(probs[mask])
+
+        # Zero on infinite entries
+        probs[~mask] = 0.0
+        return probs
+
     def choose_action(self, options, save_game):
 
         """
@@ -91,6 +130,7 @@ class Player(Model, ModelNextState):
         chance_value = random.random()
         if (chance_value < self._eps) and (save_game == False):
             choice = random.sample(options, k=1)[0]
+            return choice
         else:
             if self._add_LSTM:
                 ix_sequence_start = self._model._sequence_length_LSTM * -1 + 1
@@ -102,6 +142,11 @@ class Player(Model, ModelNextState):
             else:
                 prediction = self.predict_one([self._state])
             prediction = [p if i in options else -np.inf for i, p in enumerate(prediction)]
+
+        if self._use_probabilities and (save_game == False):
+            probabilities = self.prediction_to_probabilities(prediction)
+            choice = int(np.random.choice(self.numActions, p=probabilities))
+        else:
             choice = int(np.argmax(prediction))
 
         return choice
@@ -305,7 +350,7 @@ class Player(Model, ModelNextState):
         self._sample_buffer = [s for s in self._sample_buffer if s[3] is not None]
 
 
-    def learn_by_replay(self, batch_size):
+    def learn_by_replay(self, batch_size = None, preselect_batch = False):
 
         """
         Learn by replay! The model gets trained by using the sample buffer. You take a random batch of the memory,
@@ -313,12 +358,19 @@ class Player(Model, ModelNextState):
         Save the logs for the tensorboard
         """
 
+        # If batch_size undefined, fill with config batch size
+        if batch_size is None:
+            if preselect_batch:
+                batch_size = int(self.batchSize * 4)
+            else:
+                batch_size = int(self.batchSize)
+
         # Only learn once memory has reached batch size and not in test mode
-        if self._test_mode or (len(self._samples) <= batch_size):
+        if self._test_mode or (len(self._samples) < batch_size):
             return 0
 
         # Make a random batch
-        batch = self.create_batch()
+        batch = self.create_batch(batch_size = batch_size)
         if not batch:
             return 0
 
@@ -329,16 +381,16 @@ class Player(Model, ModelNextState):
 
         # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
         next_states = np.array(
-            [(np.zeros(self.numStates) if val[3] is None else val[3]) for seq in batch for val in seq])
+            [(np.zeros(self.numStates) if val[-2] is None else val[-2]) for seq in batch for val in seq])
         q_s_a_d = self.predict_batch(next_states)
 
         # Extract slices from batch
         all_states = np.array([b[0][0] for b in batch]) * 1.0
-        all_next_states = np.array([None if b[0][0] is None else np.array(b[0][0]).astype(float) for b in batch])
+        all_next_states = np.array([None if b[0][-2] is None else np.array(b[0][-2]).astype(float) for b in batch])
         all_rewards = np.array([b[0][2] for b in batch]) * 1.0
 
         # Set up training arrays
-        corrected_qs = np.zeros((self.batchSize, self.numActions))
+        corrected_qs = np.zeros((batch_size, self.numActions))
 
         # Bulk predict next state
         if self._curiosity:
@@ -374,9 +426,21 @@ class Player(Model, ModelNextState):
 
             corrected_qs[i] = corrected_q
 
-        summary_writer_collection_add = self.train_batch(all_states, corrected_qs, self._step)
+        # Filter batch
+        if preselect_batch:
+            correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a_uncorrected), axis=1),1)
+            idx_selection = np.argsort(correction_diff)[::-1][:int(batch_size/4)]
+            all_states_selection = all_states[idx_selection]
+            corrected_qs_selection = corrected_qs[idx_selection]
+        else:
+            all_states_selection = all_states
+            corrected_qs_selection = corrected_qs
+
+        # Train batch
+        summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self._step)
         self._summary_writer_collection += [summary_writer_collection_add]
         if self._curiosity:
+            # Train batch next state
             summary_writer_collection_add = self.train_batch_next_state(all_states, all_next_states, self._step)
             self._summary_writer_collection += [summary_writer_collection_add]
         self.update_epsilon()
@@ -426,22 +490,28 @@ class Player(Model, ModelNextState):
                     "step": self._step
                 },
             ]
+        return 1
 
-    def create_batch(self):
+    def create_batch(self, batch_size=None):
+
+        # If batch_size undefined, fill with config batch size
+        if batch_size is None:
+            batch_size = int(self.batchSize)
+
         # Guard: not enough samples to form a sequence
         if self._add_LSTM:
             selection_pool_size = len(self._samples) - self._model._sequence_length_LSTM
         else:
             selection_pool_size = len(self._samples)
 
-        if selection_pool_size <= self.batchSize:
+        if selection_pool_size < batch_size:
             return []
 
-        selection = random.choices(range(selection_pool_size), k=self.batchSize)
+        selection = random.choices(range(selection_pool_size), k=batch_size)
 
         if self._add_LSTM:
             batch = []
-            while len(batch) < self.batchSize:
+            while len(batch) < batch_size:
                 for i in selection:
                     samples_i = []
                     add_i = 0
@@ -461,7 +531,7 @@ class Player(Model, ModelNextState):
                         batch += [samples_i]
                     else:
                         continue
-                remaining = self.batchSize - len(batch)
+                remaining = batch_size - len(batch)
                 if remaining <= 0:
                     break
                 selection = random.choices(range(selection_pool_size), k=remaining)

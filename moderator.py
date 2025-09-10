@@ -135,7 +135,7 @@ class Moderator(Config):
                 player.add_corrected_sample(self._game._tag_happened)
 
                 # Learn!
-                player.learn_by_replay(self.batchSize * (len(self._players)/len(unique_players)))
+                player.learn_by_replay(int(self.batchSize * (len(self._players)/len(unique_players))))
 
             # Add rewards to reward store
             player.update_reward_store()
