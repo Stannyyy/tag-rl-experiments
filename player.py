@@ -21,7 +21,8 @@ class Player(Model, ModelNextState):
     def __init__(self, experiment, name, bootstrapValueEpsilon=0.0005, discountFactor=0.975,
                  learningRate=0.001, layers=[100, 100, 100], addLSTM=False, sequenceLengthLSTM=1,
                  render=False, justLike=None, testMode=False, curiosity=False, curiosity_beta=0,
-                 maxEpsilon=None, useProbabilities=False, numStatesOverwrite=None, numActionsOverwrite=None):
+                 maxEpsilon=None, preselectBatch=False,
+                 useProbabilities=False, numStatesOverwrite=None, numActionsOverwrite=None):
 
         # Import models
         Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers,
@@ -37,6 +38,7 @@ class Player(Model, ModelNextState):
 
         # Player variables
         self._use_probabilities = useProbabilities
+        self._preselect_batch = preselectBatch
 
         # Model variables
         self._eps = self.maxEpsilon if justLike is None else justLike._eps
@@ -350,7 +352,7 @@ class Player(Model, ModelNextState):
         self._sample_buffer = [s for s in self._sample_buffer if s[3] is not None]
 
 
-    def learn_by_replay(self, batch_size = None, preselect_batch = False):
+    def learn_by_replay(self, batch_size = None):
 
         """
         Learn by replay! The model gets trained by using the sample buffer. You take a random batch of the memory,
@@ -360,7 +362,7 @@ class Player(Model, ModelNextState):
 
         # If batch_size undefined, fill with config batch size
         if batch_size is None:
-            if preselect_batch:
+            if self._preselect_batch:
                 batch_size = int(self.batchSize * 4)
             else:
                 batch_size = int(self.batchSize)
@@ -427,7 +429,7 @@ class Player(Model, ModelNextState):
             corrected_qs[i] = corrected_q
 
         # Filter batch
-        if preselect_batch:
+        if self._preselect_batch:
             correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a_uncorrected), axis=1),1)
             idx_selection = np.argsort(correction_diff)[::-1][:int(batch_size/4)]
             all_states_selection = all_states[idx_selection]

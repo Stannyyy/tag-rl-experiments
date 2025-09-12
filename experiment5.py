@@ -31,11 +31,22 @@ class Experiment():
         # p05 = Player(experiment, name='Pietje Puk with exploration with small curiosity', curiosity=True, curiosity_beta=0.01, maxEpsilon=1)
         # p06 = Player(experiment, name='Pietje Puk with exploration with medium curiosity', curiosity=True, curiosity_beta=0.1, maxEpsilon=1)
         # p07 = Player(experiment, name='Pietje Puk with exploration with large curiosity', curiosity=True, curiosity_beta=1, maxEpsilon=1)
-        p08 = Player(experiment, name='Pietje Puk with exploration & selection', maxEpsilon=1)
+        p08 = Player(experiment, name='Pietje Puk with exploration & selection', maxEpsilon=1, preselectBatch=True)
         p09 = Player(experiment, name='Pietje Puk with temperature', maxEpsilon=1, useProbabilities=True)
-        p10 = Player(experiment, name='Pietje Puk with temperature explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.00001)
 
-        self._players = [p00, p08, p09, p10] #[p00, p02, p01, p03, p04, p05, p06, p07]
+        p10 = Player(experiment, name='Pietje Puk with temperature explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.00001)
+        p11 = Player(experiment, name='Pietje Puk explorer', maxEpsilon=1, bootstrapValueEpsilon=0.00001)
+        p12 = Player(experiment, name='Pietje Puk explorer & selection', maxEpsilon=1, preselectBatch=True, bootstrapValueEpsilon=0.0001)
+
+        p13 = Player(experiment, name='Pietje Puk with temperature mid-explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.0001)
+        p14 = Player(experiment, name='Pietje Puk mid-explorer', maxEpsilon=1, bootstrapValueEpsilon=0.0001)
+        p15 = Player(experiment, name='Pietje Puk mid-explorer & selection', maxEpsilon=1, preselectBatch=True, bootstrapValueEpsilon=0.0001)
+
+        p16 = Player(experiment, name='Pietje Puk with temperature mid-more-explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.00005)
+        p17 = Player(experiment, name='Pietje Puk mid-more-explorer', maxEpsilon=1, bootstrapValueEpsilon=0.00005)
+        p18 = Player(experiment, name='Pietje Puk mid-more-explorer & selection', maxEpsilon=1, preselectBatch=True, bootstrapValueEpsilon=0.00005)
+
+        self._players = [p00, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18] #[p00, p02, p01, p03, p04, p05, p06, p07]
 
         # Initialize results paths
         experiment_path = os.path.join(os.getcwd(), experiment)
