@@ -7,10 +7,11 @@ Created on Thu Oct 21 20:14:39 2021
 
 # Import packages
 import random
+import numpy as np
+import datetime
 from config import Config
 from game import Game
-import datetime
-import numpy as np
+from memory import Memory
 
 # Moderate game
 class Moderator(Config):
@@ -26,9 +27,11 @@ class Moderator(Config):
         self._randomPlayers = [p.isRandom for p in players]
         self._order_turns = random.sample(range(self.numPlayers), k=self.numPlayers)
         self._turn = self._order_turns[0]
+        self._turns = []
         self._turn_count = 0
-        self._game_continues = True
+        self._turn_counts = []
         self._game = Game(experiment = experiment)
+        self._games = []
 
     def get_players(self):
         return self._players
@@ -46,8 +49,8 @@ class Moderator(Config):
         if idx == len(self._order_turns):
             idx = 0
         self._turn = self._order_turns[idx]
-        
-    def play(self, save_game = False, learn = True):
+
+    def play_one(self, save_game = False, learn = True):
         
         # Initialize game
         self._turn_count = 0
@@ -78,8 +81,8 @@ class Moderator(Config):
 
             if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
-                player.update_sample(player.options)
-                player.add_corrected_sample(self._game._tag_happened)
+                player._memory.update_sample(player.options, player.state)
+                player._memory.add_corrected_sample(self._game._tag_happened)
 
             # Make a move! Unless a tag has happened or the game has reached maximum turns
             if self._game._ended > 0:
@@ -87,7 +90,7 @@ class Moderator(Config):
             else:
                 choice = player.choose_action(player.options, save_game)
             reward = self._game.move(self._turn, choice)
-            if self._turn_count > (50 + self.numPlayers):
+            if self._turn_count > (self.maxSteps + self.numPlayers):
                 raise Exception("Game is stuck in non-ending state.")
             self._turn_count += 1
 
@@ -102,14 +105,14 @@ class Moderator(Config):
             else:
                 player._tot_reward_runner += reward
             if learn:
-                player.sample = (choice, reward)
+                player._memory.sample = (choice, reward, player.state)
 
             # Write if save video
             if save_game:
                 self._game.save(prefix=str(self._turn_count+1))
 
             # Determine if game ended and determine next state
-            if self._turn_count >= 50:
+            if self._turn_count >= self.maxSteps:
                 self._game._ended += 1
                 player.options = self._game.what_options(self._turn)
 
@@ -127,12 +130,12 @@ class Moderator(Config):
             if learn:
                 # Append next state and its options to sample (idx 3 and 4 of sample)
                 if self._game._tag_happened:
-                    player.update_sample(None)
+                    player._memory.update_sample(None, player.state)
                 else:
-                    player.update_sample(player.options)
+                    player._memory.update_sample(player.options, player.state)
 
                 # Add last sample
-                player.add_corrected_sample(self._game._tag_happened)
+                player._memory.add_corrected_sample(self._game._tag_happened)
 
                 # Learn!
                 player.learn_by_replay(int(self.batchSize * (len(self._players)/len(unique_players))))
@@ -141,7 +144,8 @@ class Moderator(Config):
             player.update_reward_store()
 
             # Add rewards to tensorboard
-            player.add_rewards_to_tensorboard(self._turn_count)
+            if not save_game:
+                player.add_rewards_to_tensorboard(self._turn_count)
 
             # Reset player
             player._tot_reward_tagger = 0
@@ -152,6 +156,108 @@ class Moderator(Config):
             self.shuffle_players()
         else:
             self.alternate_players()
+
+    def play_many(self, learn=True):
+
+        # Initialize games
+        self._games = [Game(experiment = self._experiment) for ep in range(self.numEpisodesPerRound)]
+        [self._games[ep].init_random_game() for ep in range(self.numEpisodesPerRound)]
+        self._turn_counts = [0 for ep in range(self.numEpisodesPerRound)]
+        game_overs = [False for ep in range(self.numEpisodesPerRound)]
+
+        # Shuffle players for robustness
+        self.shuffle_players()
+
+        # Reset players
+        [p.new_game() for p in self._players]
+        unique_players = list(set(self._players))
+        for p in unique_players:
+            p.memory_many = [Memory(self.maxMemory) for ep in range(self.numEpisodesPerRound)]
+
+        for i in range(self.maxSteps+self.numPlayers):
+
+            # Print progress
+            print(f"\rPlaying many games, step {i} out of {self.maxSteps}", end='')
+
+            # Determine next state
+            player = self._players[self._turn]
+            player.options = [[8] if game_overs[ep] else self._games[ep].what_options(self._turn) for ep in range(self.numEpisodesPerRound)]
+
+            # Set new player state
+            player.state_many = [(self._games[ep]._x_list,
+                                  self._games[ep]._y_list,
+                                  self._turn,
+                                  self._games[ep]._taggers[self._turn])
+                                  for ep in range(self.numEpisodesPerRound)]
+
+            # Append next state and its options to sample (idx 3 and 4 of sample)
+            [player.memory_many[ep].update_sample(player.options[ep], player.state_many[ep])
+             for ep in range(self.numEpisodesPerRound)]
+            [player.memory_many[ep].add_corrected_sample(self._games[ep]._tag_happened)
+             for ep in range(self.numEpisodesPerRound)]
+
+            # Select unfinished games
+            slct = [ep for ep in range(self.numEpisodesPerRound) if not game_overs[ep]]
+
+            # Make a move! Unless a tag has happened or the game has reached maximum turns
+            choices = player.choose_many_actions(player.options, slct)
+            choices = [8 if self._games[ep]._ended > 0 else choices[ep] for ep in range(self.numEpisodesPerRound)]
+
+            # Set new sample
+            rewards = [self._games[ep].move(self._turn, choices[ep]) for ep in range(self.numEpisodesPerRound)]
+            player._rewards = rewards
+            for ep in range(self.numEpisodesPerRound):
+                if self._games[ep]._taggers[self._turn]:
+                    player._tot_reward_tagger += rewards[ep]
+                else:
+                    player._tot_reward_runner += rewards[ep]
+                player.memory_many[ep].sample = (choices[ep], rewards[ep], player.state_many[ep])
+
+            # Determine if game ended and determine next state
+            if i >= self.maxSteps:
+                for ep in range(self.numEpisodesPerRound):
+                    self._games[ep]._ended += 1
+            game_overs = [self._games[ep]._ended >= self.numPlayers
+                          for ep in range(self.numEpisodesPerRound)]
+
+            # Next turn
+            self.next_turn()
+            self._turn_counts = [self._turn_counts[ep] if self._games[ep]._ended else self._turn_counts[ep] + 1 for ep in range(self.numEpisodesPerRound)]
+
+        print("\nPlaying over, now preparing to learn")
+        p._cnt += self.numEpisodesPerRound
+        for p in unique_players:
+
+            # Load all games into one memory
+            for ep in range(self.numEpisodesPerRound):
+
+                # Load samples to memory
+                ep_samples = p.memory_many[ep].samples
+                unique_ep_samples = []
+                for ep_sample in ep_samples:
+                    if ep_sample not in unique_ep_samples:
+                        unique_ep_samples.append(ep_sample)
+                        p._memory._sample = ep_sample
+                        p._memory.add_sample()
+
+            # Add rewards
+            p.update_reward_store()
+            p.add_rewards_to_tensorboard(np.mean(self._turn_counts))
+
+            # Learn!
+            if learn:
+                prev_loss = 1000; min_learn_cycles = 10; learn_cycle = 0
+                while True:
+                    p.learn_by_replay(len(p._memory._samples), epochs=1, verbose=True)
+                    p.step +=1
+                    loss = [c.get('value') for c in p._summary_writer_collection if c.get('name') == 'params/losses'][-1]
+                    learn_cycle += 1
+                    print(f"Prev {prev_loss} now {loss}, with learn cycle {learn_cycle}")
+                    if prev_loss < loss:
+                        if learn_cycle > min_learn_cycles:
+                            break
+                    prev_loss = loss
+
 
     def write_video_text(self):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \

@@ -24,24 +24,30 @@ class Arena(Config):
         self.start_time = datetime.datetime.now()
         self.total_time = 0
 
-    def play_and_learn(self):
+    def play_and_learn(self, mode='sequential'):
         self.start_stopwatch()
         new_round = True
         # Loop for number of episodes
         if self.cnt < self.numEpisodes:
-            while (self.cnt % self.numEpisodesBeforePrint != 1) | (new_round == True):
-                new_round = False
-                for player in self.modertr.players:
-                    player.step = self.cnt
+            if mode == 'sequential':
+                while (self.cnt % self.numEpisodesPerRound != 1) | (new_round == True):
+                    new_round = False
+                    for player in self.modertr.players:
+                        player.step = self.cnt
+                        player._cnt = self.cnt
 
-                # Play episode!
-                self.modertr.play(False)
-                if len(self.modertr.players[0]._losses) > 0:
-                    self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.modertr.players[0]._losses[-1],2)))
-                self.cnt += 1
+                    # Play episode!
+                    self.modertr.play_one(False)
+                    if len(self.modertr.players[0]._losses) > 0:
+                        self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.modertr.players[0]._losses[-1],2)))
+                    self.cnt += 1
 
-                # Stop the stopwatch
+                    # Stop the stopwatch
+                    self.stop_stopwatch()
+            elif mode == 'parallel':
+                self.modertr.play_many()
                 self.stop_stopwatch()
+                self.cnt += self.numEpisodesPerRound
 
             # Print progress
             print('\nRound', self.cnt-1, 'out of', self.numEpisodes, self.total_time, 'sec elapsed')
@@ -55,7 +61,6 @@ class Arena(Config):
                     print(player.name + '; av reward tagger: ' + str(
                         av_rwd_tagger) + ', av reward runner: ' + str(av_rwd_runner))
 
-                else:
                     # Print progress
                     av_loss = np.array(player.losses[-100:]).mean().round(5)
                     av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(5)
@@ -70,14 +75,15 @@ class Arena(Config):
 
             # Show a couple of episodes
             for i in range(2):
-                self.modertr.play(self.createVideo, learn=False)
+                self.modertr.play_one(self.createVideo, learn=False)
 
             # Save models
             self.save_status()
 
 
     def save_status(self):
-        for p in self.modertr.players:
+        unique_players = list(set(self.modertr.players))
+        for p in unique_players:
             if p.isRandom == False:
 
                 # Save model
@@ -91,26 +97,30 @@ class Arena(Config):
                 p._model = 0
                 p._model_next_state = 0
                 p._summary_writer = ''
+                p._tboard_callback = ''
+                self.modertr = ''
+                self.step = p.step
+                self._eps = p._eps
+                self._cnt = p._cnt
                 with open(p._state_path, "wb") as file_:
                     pickle.dump(self, file_, -1)
                 p.reload()
 
-    def competition(self, numEpisodes):
+
+    def competition(self):
+
+        # Reload players
+        for p in self.modertr.players:
+            p.reload()
 
         # Loop for number of episodes
         cnt = 0
-        while cnt < numEpisodes:
+        while cnt < 10:
             cnt += 1
-            self.progress_bar(task=f'Playing episode: {str(cnt)} of {str(numEpisodes)}', based_on='i', i=cnt, total=numEpisodes)
+            print(f"Showing {cnt} out of {10} before starting large competition")
+            self.modertr.play_one(save_game=True, learn=False)
 
-            # Play episode!
-            if cnt <= 10:
-                self.modertr.play(save_game=True, learn=False)
-            else:
-                self.modertr.play(save_game=False, learn=False)
-
-        # End arena
-        cnt += 1
+        self.modertr.play_many(learn=False)
 
     def start_stopwatch(self):
         self.start_time = datetime.datetime.now()
@@ -122,11 +132,11 @@ class Arena(Config):
 
     def progress_bar(self, task, based_on='episodes', i=100, total=None):
         if based_on == 'episodes':
-            total = self.numEpisodesBeforePrint
+            total = self.numEpisodesPerRound
             i = self.cnt
         elif based_on == 'i':
             if total is None:
-                total = self.numEpisodesBeforePrint/10
+                total = self.numEpisodesPerRound / 10
         percent = int(np.ceil((100 * (i % total / float(total)))))
         if percent == 0:
             percent = 100

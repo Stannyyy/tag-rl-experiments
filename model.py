@@ -131,14 +131,16 @@ class Model(Config):
 
         return np.squeeze(predictions)
 
-    def train_batch(self, x_batch, y_batch, step):
+    def train_batch(self, x_batch, y_batch, step, callback, log_dir, epochs=1, verbose=False):
         """
         Train one batch and log the training loss
         Returns a summary dict for the tensorboard
         """
 
         # Train batch
-        log = self._model.fit(x_batch, y_batch, epochs=1, verbose=0)
+        tf.profiler.experimental.start(log_dir)
+        log = self._model.fit(x_batch, y_batch, epochs=epochs, verbose=verbose)
+        tf.profiler.experimental.stop()
 
         # Add losses to log
         self._losses += log.history.get('loss')

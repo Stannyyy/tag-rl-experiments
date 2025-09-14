@@ -6,17 +6,16 @@ Created on Thu Oct 21 20:14:00 2021
 """
 
 # Import packages
+import os; os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import random
 import numpy as np
 import math
 from model import Model, ModelNextState
+from memory import Memory
 import tensorflow as tf
-import os
-import warnings
-import copy
 
 # Player
-class Player(Model, ModelNextState):
+class Player(Model, ModelNextState, Memory):
 
     def __init__(self, experiment, name, bootstrapValueEpsilon=0.0005, discountFactor=0.975,
                  learningRate=0.001, layers=[100, 100, 100], addLSTM=False, sequenceLengthLSTM=1,
@@ -42,14 +41,16 @@ class Player(Model, ModelNextState):
 
         # Model variables
         self._eps = self.maxEpsilon if justLike is None else justLike._eps
+        self._cnt = 0
         self._bootstrapValueEpsilon = bootstrapValueEpsilon  # formerly lambda
         self._discountFactor = discountFactor  # formerly gamma
 
+        # Memory
+        self._memory = Memory(self.maxMemory)
+        self._memories = []
+
         # Experience variables (carrying over using justLike)
         self._step = 0 if justLike is None else justLike._step
-        self._samples = [] if justLike is None else justLike._samples.copy()
-        self._samples_count = 0
-        self._sample_buffer = []
 
         # Curiosity variables
         self._curiosity = curiosity
@@ -60,9 +61,9 @@ class Player(Model, ModelNextState):
         # Render variables
         self._render = render
 
-        # Sample variables
+        # State variables
         self._state = np.array([])
-        self._sample = []
+        self._state_many = []
 
         # Collection variables
         self._reward_store_tagger = []
@@ -70,6 +71,7 @@ class Player(Model, ModelNextState):
 
         # State variables
         self._reward = 0
+        self._rewards = []
         self._tot_reward_tagger = 0
         self._tot_reward_runner = 0
         self._options = []
@@ -86,6 +88,9 @@ class Player(Model, ModelNextState):
         # Set up the tensorboard
         self._summary_writer = tf.summary.create_file_writer(self._log_path)
         self._summary_writer_collection = []
+        self._tboard_callback_command = 'self._tboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(os.getcwd(), "'+experiment+'", "logs"), profile_batch= 1)'
+        exec(self._tboard_callback_command)
+
 
     def prediction_to_probabilities(self, prediction):
         """
@@ -139,7 +144,7 @@ class Player(Model, ModelNextState):
                 if ix_sequence_start == 0:
                     last_x_minus_1_samples = []
                 else:
-                    last_x_minus_1_samples = self._samples[(self._model._sequence_length_LSTM * -1 + 1):]
+                    last_x_minus_1_samples = self._memory._samples[(self._model._sequence_length_LSTM * -1 + 1):]
                 prediction = self.predict_one([[s[0] for s in last_x_minus_1_samples] + [self._state]])
             else:
                 prediction = self.predict_one([self._state])
@@ -152,6 +157,53 @@ class Player(Model, ModelNextState):
             choice = int(np.argmax(prediction))
 
         return choice
+
+    def choose_many_actions(self, options, slct):
+
+        """
+        Choose many action: random based on chance value epsilon OR based on current policy for the given state
+        for all games in the batch in parallel
+        """
+
+        # Check requirements
+        if self._add_LSTM:
+            raise Exception("LSTM option is not yet suitable to use with parallel mode")
+
+        # Use chance to see whether to explore or exploit
+        chance_value = random.random()
+        if chance_value < self._eps:
+            all_choices = [random.sample(options[ep], k=1)[0] if ep in slct else 8 for ep in range(self.numEpisodesPerRound)]
+            return all_choices
+        else:
+            if len(slct) > 1:
+                prediction = self.predict_batch([state for ix, state in enumerate(self._state_many) if ix in slct])
+            elif len(slct) == 1:
+                prediction = self.predict_batch([[self._state_many[slct[0]]]])
+                prediction = np.expand_dims(prediction, axis=0)
+            else:
+                prediction = []
+            for ep in range(self.numEpisodesPerRound):
+                if ep in slct:
+                    for i, p in enumerate(prediction[slct.index(ep)]):
+                        prediction[slct.index(ep)][i] = p if i in options[ep] else -np.inf
+
+        choices = []
+        if self._use_probabilities:
+            for p in prediction:
+                probabilities = self.prediction_to_probabilities(p)
+                choices.append(int(np.random.choice(self.numActions, p=probabilities)))
+        else:
+            for p in prediction:
+                choices.append(int(np.argmax(p)))
+
+        all_choices = []
+        for ep in range(self.numEpisodesPerRound):
+            if ep in slct:
+                all_choices.append(choices[slct.index(ep)])
+            else:
+                all_choices.append(8)
+
+        return all_choices
 
     def write_summary_to_tensorboard(self):
 
@@ -204,16 +256,6 @@ class Player(Model, ModelNextState):
 
     eps = property(get_eps, set_eps)
 
-    def get_samples(self):
-        return self._samples
-
-    samples = property(get_samples)
-
-    def set_samples(self, samples):
-        self._samples = samples
-
-    samples = property(get_samples, set_samples)
-
     def get_state(self):
         return self._state
 
@@ -224,6 +266,19 @@ class Player(Model, ModelNextState):
         self._state = game_x_list + game_y_list + [turn, int(is_tagger)]
 
     state = property(get_state, set_state)
+
+    def get_state_many(self):
+        return self._state_many
+
+    state_many = property(get_state_many)
+
+    def set_state_many(self, values):
+        self._state_many = []
+        for state in values:
+            game_x_list, game_y_list, turn, is_tagger = state
+            self._state_many += [game_x_list + game_y_list + [turn, int(is_tagger)]]
+
+    state_many = property(get_state_many, set_state_many)
 
     def get_options(self):
         return self._options
@@ -245,114 +300,7 @@ class Player(Model, ModelNextState):
 
     step = property(get_step, set_step)
 
-    def get_sample(self):
-        return self._sample
-
-    sample = property(get_sample)
-
-    def set_sample(self, values):
-        choice, reward = values
-        self._sample = [self._state, choice, reward]
-
-    sample = property(get_sample, set_sample)
-
-    def update_sample(self, options):
-
-        """
-        Update remaining sample with next state and options for next state
-        """
-
-        if options is None:
-            self._sample += [None, None]
-        if len(self._sample) == 3:
-            self._sample += [self._state, options]
-
-    def add_corrected_sample(self, tag_happened):
-
-        """
-        Add sample to sample history (and fix buffer if necessary)
-        The sample buffer is there in case the player is playing against itself. Then the next state is not the next
-        sample, but the one where it is in the same role again.
-        """
-
-        # If the sample is empty, you're done
-        if len(self._sample) == 0:
-            return None
-
-        # If no tag happened, check if sample needs correction (if yes add to sample buffer)
-        if tag_happened:
-            if self._sample[3] is not None:
-                self._sample[3:5] = (None, None)
-            self._sample_buffer += [copy.deepcopy(self._sample)]
-            self.add_sample()
-        else:
-            # If role of current and next state are different
-            # due to player playing against itself: buffer to correct
-            if self._sample[0][-2] is not self._sample[3][-2]:
-                self._sample_buffer += [copy.deepcopy(self._sample)]
-                self._sample = []
-            else:
-                self.add_sample()
-
-        # For the sample buffer, find the subsequent samples with matching roles
-        # The state and next state should have the same role for one sample
-        self.correct_sample_buffer()
-
-        # If the amount of samples exceeds memory, truncate
-        if len(self._samples) > self.maxMemory:
-            self._samples = self._samples[-self.maxMemory:]
-
-    def add_sample(self):
-        self._samples_count += 1
-        self._samples += [self._sample]
-        self._sample = []
-
-    def correct_sample_buffer(self):
-
-        """
-        Take the first sample in the buffer, then find the matching sample to correct the first.
-        The sample buffer is there in case the player is playing against itself. Then the next state is not the next
-        sample, but the one where it is in the same role again.
-        """
-
-        # Take the first sample
-        i = 0; del_is = []
-        while len(self._sample_buffer) > (i + 1):
-            sample_to_correct = copy.deepcopy(self._sample_buffer[i])
-            turn = sample_to_correct[0][-2]
-            match_found = False
-            for j, _sample in enumerate(self._sample_buffer[(i+1):], start=i+1):
-
-                # Find matching sample (same role)
-                if _sample[3] is None and _sample[0][-2] == turn:
-                    sample_to_correct[-2] = _sample[0]
-                    sample_to_correct[-1] = [_sample[1]]
-                    match_found = True
-
-                elif len(_sample) is 5 and _sample[3] is not None and _sample[3][-2] == turn:
-
-                    # Take this found sample to correct the next state and next options of the sample to correct
-                    sample_to_correct[-2:] = _sample[-2:]
-                    match_found = True
-
-                if match_found:
-                    self._sample = sample_to_correct
-                    self.add_sample()
-
-                    # Once corrected, it can be deleted from the buffer
-                    if i not in del_is:
-                        del_is += [i]
-                    break
-
-            # Delete from buffer
-            self._sample_buffer = [s for d, s in enumerate(self._sample_buffer) if d not in del_is]
-            i+=1; i-=len(del_is); del_is = []
-
-        # Clean up finished samples
-        self._sample_buffer = [s for s in self._sample_buffer if s[3] is not None]
-
-
-    def learn_by_replay(self, batch_size = None):
+    def learn_by_replay(self, batch_size = None, epochs = 1, verbose = False):
 
         """
         Learn by replay! The model gets trained by using the sample buffer. You take a random batch of the memory,
@@ -368,7 +316,7 @@ class Player(Model, ModelNextState):
                 batch_size = int(self.batchSize)
 
         # Only learn once memory has reached batch size and not in test mode
-        if self._test_mode or (len(self._samples) < batch_size):
+        if self._test_mode or (len(self._memory._samples) < batch_size):
             return 0
 
         # Make a random batch
@@ -388,7 +336,7 @@ class Player(Model, ModelNextState):
 
         # Extract slices from batch
         all_states = np.array([b[0][0] for b in batch]) * 1.0
-        all_next_states = np.array([None if b[0][-2] is None else np.array(b[0][-2]).astype(float) for b in batch])
+        all_next_states = np.array([None if b[0][-2] is None else np.array(b[0][-2]).astype(float) for b in batch], dtype=object)
         all_rewards = np.array([b[0][2] for b in batch]) * 1.0
 
         # Set up training arrays
@@ -439,7 +387,9 @@ class Player(Model, ModelNextState):
             corrected_qs_selection = corrected_qs
 
         # Train batch
-        summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self._step)
+        summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self._step,
+                                                         self._tboard_callback, self._log_path,
+                                                         epochs=epochs, verbose=verbose)
         self._summary_writer_collection += [summary_writer_collection_add]
         if self._curiosity:
             # Train batch next state
@@ -502,9 +452,9 @@ class Player(Model, ModelNextState):
 
         # Guard: not enough samples to form a sequence
         if self._add_LSTM:
-            selection_pool_size = len(self._samples) - self._model._sequence_length_LSTM
+            selection_pool_size = len(self._memory._samples) - self._model._sequence_length_LSTM
         else:
-            selection_pool_size = len(self._samples)
+            selection_pool_size = len(self._memory._samples)
 
         if selection_pool_size < batch_size:
             return []
@@ -538,7 +488,7 @@ class Player(Model, ModelNextState):
                     break
                 selection = random.choices(range(selection_pool_size), k=remaining)
         else:
-            batch = [[self._samples[i]] for i in selection]
+            batch = [[self._memory._samples[i]] for i in selection]
         return batch
 
     def show_q_in_state(self, game):
@@ -579,7 +529,7 @@ class Player(Model, ModelNextState):
 
         # Update epsilon
         self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(
-            -self._bootstrapValueEpsilon * self._step)
+            -self._bootstrapValueEpsilon * self._cnt)
 
     def add_rewards_to_tensorboard(self, turn_count):
         self._summary_writer_collection += [
@@ -634,6 +584,7 @@ class Player(Model, ModelNextState):
             if checkpoints_next_state:
                 self.load_checkpoint_next_state(os.path.join(self._checkpoint_path, checkpoints_next_state[-1]))
         self._summary_writer = tf.summary.create_file_writer(self._log_path)
+        exec(self._tboard_callback_command)
 
     def new_part(self, current_part, new_part):
         self._state_path = self._state_path.replace(current_part, new_part)
@@ -690,6 +641,9 @@ class RandomPlayer():
         game_x_list, game_y_list, turn, is_tagger = values
         pass
 
+    def set_state_many(self, values):
+        pass
+
     def update_reward_store(self):
         self._reward_store_tagger.append(float(self._tot_reward_tagger))
         self._reward_store_runner.append(float(self._tot_reward_runner))
@@ -701,10 +655,12 @@ class RandomPlayer():
         pass
 
     def set_sample(self, values):
-        choice, reward = values
         pass
 
     def update_sample(self, options):
+        pass
+
+    def update_sample_many(self):
         pass
 
     def add_corrected_sample(self, tag_happened):
@@ -775,6 +731,9 @@ class StillPlayer():
         game_x_list, game_y_list, turn, is_tagger = values
         pass
 
+    def set_state_many(self, values):
+        pass
+
     def update_reward_store(self):
         self._reward_store_tagger.append(float(self._tot_reward_tagger))
         self._reward_store_runner.append(float(self._tot_reward_runner))
@@ -786,10 +745,12 @@ class StillPlayer():
         pass
 
     def set_sample(self, values):
-        choice, reward = values
         pass
 
     def update_sample(self, options):
+        pass
+
+    def update_sample_many(self):
         pass
 
     def add_corrected_sample(self, tag_happened):

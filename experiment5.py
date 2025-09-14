@@ -19,7 +19,7 @@ class Experiment():
 
         # Experiment definition
         self._experiment = experiment
-        self._total_n_training = int(self.numEpisodes / self.numEpisodesBeforePrint)
+        self._total_n_training = int(self.numEpisodes / self.numEpisodesPerRound)
         self._total_n_competition = int(self.numPlayers)
 
         # Player definition
@@ -36,17 +36,20 @@ class Experiment():
 
         p10 = Player(experiment, name='Pietje Puk with temperature explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.00001)
         p11 = Player(experiment, name='Pietje Puk explorer', maxEpsilon=1, bootstrapValueEpsilon=0.00001)
-        p12 = Player(experiment, name='Pietje Puk explorer & selection', maxEpsilon=1, preselectBatch=True, bootstrapValueEpsilon=0.0001)
+        p12 = Player(experiment, name='Pietje Puk explorer & selection', maxEpsilon=1, preselectBatch=True, bootstrapValueEpsilon=0.00001)
 
         p13 = Player(experiment, name='Pietje Puk with temperature mid-explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.0001)
-        p14 = Player(experiment, name='Pietje Puk mid-explorer', maxEpsilon=1, bootstrapValueEpsilon=0.0001)
+        p14 = Player(experiment, name='Pietje Puk with temperature mid-explorer heavy', maxEpsilon=1, useProbabilities=True,
+                     bootstrapValueEpsilon=0.0001)
+
+        # p14 = Player(experiment, name='Pietje Puk mid-explorer', maxEpsilon=1, bootstrapValueEpsilon=0.0001)
         p15 = Player(experiment, name='Pietje Puk mid-explorer & selection', maxEpsilon=1, preselectBatch=True, bootstrapValueEpsilon=0.0001)
 
         p16 = Player(experiment, name='Pietje Puk with temperature mid-more-explorer', maxEpsilon=1, useProbabilities=True, bootstrapValueEpsilon=0.00005)
         p17 = Player(experiment, name='Pietje Puk mid-more-explorer', maxEpsilon=1, bootstrapValueEpsilon=0.00005)
         p18 = Player(experiment, name='Pietje Puk mid-more-explorer & selection', maxEpsilon=1, preselectBatch=True, bootstrapValueEpsilon=0.00005)
 
-        self._players = [p00, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18] #[p00, p02, p01, p03, p04, p05, p06, p07]
+        self._players = [p14]#, p08, p09, p10, p11]#, p12, p13, p14, p15, p16, p17, p18] #[p00, p02, p01, p03, p04, p05, p06, p07]
 
         # Initialize results paths
         experiment_path = os.path.join(os.getcwd(), experiment)
@@ -106,14 +109,18 @@ class Experiment():
                 # If there is an existing training, continue there
                 if os.path.exists(p._state_path):
                     arn = pickle.load(open(p._state_path, "rb", -1))
-                    for p in arn.modertr.players:
-                        p.reload()
+                    p.step = arn.step
+                    p._eps = arn._eps
+                    p._cnt = arn.cnt
+                    p.reload()
+                    mdrtr = Moderator([p, p], experiment=self._experiment)
+                    arn.modertr = mdrtr
                 else:
                     mdrtr = Moderator([p, p], experiment=self._experiment)
                     arn = Arena(mdrtr, training_phase="part1")
 
                 # Play and learn in the arena!
-                arn.play_and_learn()
+                arn.play_and_learn(mode='parallel')
 
                 # Update admin
                 self._training_done, self._competition_done = self.admin_of_completed_tasks()
@@ -125,6 +132,8 @@ class Experiment():
 
                         # Initialize competition
                         ps = [self._players[ix], self._players[icomp]]
+                        for p in ps:
+                            p.reload()
                         start = datetime.datetime.now().strftime('%Y%m%d-%H%M')
                         start_lens_runner = []; start_lens_tagger = []; unique_players = list(set(ps))
                         for p in unique_players:
@@ -135,7 +144,7 @@ class Experiment():
                         print(f"{ps[0].name} is competing against {ps[1].name}")
                         mdrtr = Moderator(ps, experiment=self._experiment)
                         arn = Arena(mdrtr, training_phase="part2")
-                        arn.competition(1000)
+                        arn.competition()
 
                         results = {'player1': ps[0].name, 'player2': ps[1].name, 'start_time': start, 'end_time': datetime.datetime.now().strftime('%Y%m%d-%H%M')}
                         for i, p in enumerate(unique_players):

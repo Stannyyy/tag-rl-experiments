@@ -47,7 +47,7 @@ class Experiment():
                 if not os.path.exists(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}'):
                     os.mkdir(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}')
     def continue_experiment(self):
-        total = int(self.numEpisodes/self.numEpisodesBeforePrint)
+        total = int(self.numEpisodes/self.numEpisodesPerRound)
         for p in self._players:
             part1_done = len(os.listdir(os.getcwd()+f'{self._experiment}/checkpoints/{p._name}/part1'))
             if part1_done == total:

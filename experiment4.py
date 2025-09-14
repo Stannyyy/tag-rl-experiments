@@ -50,7 +50,7 @@ class Experiment():
     def continue_experiment(self):
         self.start_tensorboard()
 
-        total = int(self.numEpisodes/self.numEpisodesBeforePrint)
+        total = int(self.numEpisodes/self.numEpisodesPerRound)
         for p in self._players:
             part1_done = len(os.listdir(os.getcwd()+f'{self._experiment}/checkpoints/{p._name}/part1'))
             if part1_done == total:
