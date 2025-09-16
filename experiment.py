@@ -28,7 +28,12 @@ class Experiment():
         p02 = Player(experiment, name='learningRate=0.0001', learningRate=0.0001)
         p03 = Player(experiment, name='learningRate=0.00001', learningRate=0.00001)
 
-        self._players = [p00, p01, p02, p03]
+        p04 = Player(experiment, name='learningRate=0.01; ', learningRate=0.01)
+        p05 = Player(experiment, name='learningRate=0.001', learningRate=0.001)
+        p06 = Player(experiment, name='learningRate=0.0001', learningRate=0.0001)
+        p07 = Player(experiment, name='learningRate=0.00001', learningRate=0.00001)
+
+        self._players = [p00, p01, p02, p03, p04, p05, p06, p07]
 
         # Initialize results paths
         experiment_path = os.path.join(os.getcwd(), experiment)

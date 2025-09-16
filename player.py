@@ -6,28 +6,23 @@ Created on Thu Oct 21 20:14:00 2021
 """
 
 # Import packages
-import os; os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import random
 import numpy as np
 import math
+import tensorflow as tf
 from model import Model, ModelNextState
 from memory import Memory
-import tensorflow as tf
+from config import Config
 
 # Player
-class Player(Model, ModelNextState, Memory):
+class Player(Config, Model, ModelNextState, Memory):
 
-    def __init__(self, experiment, name, bootstrapValueEpsilon=0.001, discountFactor=0.99,
-                 learningRate=0.0001, layers=[100, 100, 100], addLSTM=False, sequenceLengthLSTM=1,
-                 render=False, justLike=None, testMode=False, curiosity=False, curiosity_beta=0,
-                 maxEpsilon=None, preselectBatch=False,
-                 useProbabilities=False, numStatesOverwrite=None, numActionsOverwrite=None):
+    def __init__(self, experiment, name, justLike=None, **kwargs):
 
-        # Import models
-        Model.__init__(self, experiment=experiment, learningRate=learningRate, layers=layers,
-                       addLSTM=addLSTM, sequenceLengthLSTM=sequenceLengthLSTM,
-                       numStatesOverwrite=numStatesOverwrite, numActionsOverwrite=numActionsOverwrite)
-        if curiosity:
+        # Import model, memory and config
+        super().__init__(**kwargs)
+        self.__dict__.update(kwargs)
+        if self.curiosity:
             ModelNextState.__init__(self, experiment=experiment, addLSTM=addLSTM, sequenceLengthLSTM=sequenceLengthLSTM)
 
         # Identifying variables
@@ -36,8 +31,8 @@ class Player(Model, ModelNextState, Memory):
         self.isStill = False
 
         # Player variables
-        self._use_probabilities = useProbabilities
-        self._preselect_batch = preselectBatch
+        self._use_probabilities = self.useProbabilities
+        self._preselect_batch = self.preselectBatch
 
         # Model variables
         self._eps = self.maxEpsilon if justLike is None else justLike._eps
