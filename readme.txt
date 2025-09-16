@@ -23,3 +23,8 @@ To run pytest
 - Filter by name/keyword: pytest -k "math and not slow" (mark by @pytest.mark.slow)
 - Run a specific file: pytest tests/test_sample.py
 - Run a specific test: pytest tests/test_sample.py::test_math_works
+
+To manage environment using pip-tools (not working yet)
+pip install --upgrade pip pip-tools
+pip-compile --generate-hashes -o requirements.txt requirements.in
+git add requirements.in requirements.txt

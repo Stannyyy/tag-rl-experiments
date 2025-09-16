@@ -5,6 +5,10 @@ import os
 from config import Config
 import pickle
 import shutil
+import datetime
+import numpy as np
+import pandas as pd
+import sys
 from logs import TensorBoardLogs
 
 class Experiment():
@@ -15,115 +19,130 @@ class Experiment():
 
         # Experiment definition
         self._experiment = experiment
+        self._total_n_training = int(self.numEpisodes / self.numEpisodesPerRound)
+        self._total_n_competition = int(self.numPlayers)
 
         # Player definition
-        p00 = Player(experiment, name='Pietje Puk', addLSTM=False)
-        p01 = Player(experiment, name='Pietje Puk with memory', addLSTM=True, sequenceLength=5)
-        p02 = Player(experiment, name='Pietje Puk with very short memory', addLSTM=True, sequenceLength=1)
-        self._players = [p01, p00, p02]
-        # p00 = Player(experiment, name='Pietje Puk')
-        # p01 = Player(experiment, name='Liesje Lot', bootstrapValueEpsilon=0.0001)
-        # p02 = Player(experiment, name='Naima Nima', bootstrapValueEpsilon=0.01)
-        # p03 = Player(experiment, name='Samir Smit', layers=[25, 25, 25])
-        # p04 = Player(experiment, name='Biesje Bos', layers=[1000, 1000, 1000])
-        # p05 = Player(experiment, name='Diego Delo', layers=[100, 100])
-        # p06 = Player(experiment, name='Arie Aaron', layers=[100, 100, 100, 100])
-        # p07 = Player(experiment, name='Fatima Flo', learningRate=0.01)
-        # p08 = Player(experiment, name='Omari Oost', learningRate=0.0001)
-        # p09 = Player(experiment, name='Lida Leeuw', discountFactor=0.995)
-        # p10 = Player(experiment, name='Kim Klasen', discountFactor=0.95)
-        # self._players = [p00, p01, p02, p03, p04, p05, p06, p07, p08, p09, p10]
+        p00 = Player(experiment, name='learningRate=0.01', learningRate=0.01)
+        p01 = Player(experiment, name='learningRate=0.001', learningRate=0.001)
+        p02 = Player(experiment, name='learningRate=0.0001', learningRate=0.0001)
+        p03 = Player(experiment, name='learningRate=0.00001', learningRate=0.00001)
+
+        self._players = [p00, p01, p02, p03]
 
         # Initialize results paths
-        if not os.path.exists(os.getcwd() + experiment):
-            os.mkdir(os.getcwd() + experiment)
-        if not os.path.exists(os.getcwd() + experiment + '/checkpoints'):
-            os.mkdir(os.getcwd() + experiment + '/checkpoints')
-        if not os.path.exists(os.getcwd() + experiment + '/results'):
-            os.mkdir(os.getcwd() + experiment + '/results')
-        if not os.path.exists(os.getcwd() + experiment + '/state'):
-            os.mkdir(os.getcwd() + experiment + '/state')
-        if not os.path.exists(os.getcwd() + experiment + '/code'):
-            os.mkdir(os.getcwd() + experiment + '/code')
+        experiment_path = os.path.join(os.getcwd(), experiment)
+        os.makedirs(experiment_path, exist_ok=True)
+        os.makedirs(os.path.join(experiment_path, 'checkpoints'), exist_ok=True)
+        os.makedirs(os.path.join(experiment_path, 'results'), exist_ok=True)
+        os.makedirs(os.path.join(experiment_path, 'state'), exist_ok=True)
+        os.makedirs(os.path.join(experiment_path, 'code'), exist_ok=True)
+        os.makedirs(os.path.join(experiment_path, 'competition'), exist_ok=True)
 
         # Add a version of the code to the code base
-        shutil.copy(__file__, os.getcwd() + experiment + '/code/experiment.py')
+        shutil.copy(__file__, os.path.join(experiment_path, 'code', 'experiment.py'))
         for file in ['arena.py', 'config.py', 'game.py', 'main.py', 'model.py', 'moderator.py', 'player.py']:
-            shutil.copy(os.getcwd() + '/' + file, os.getcwd() + experiment + '/code/' + file)
+            shutil.copy(os.path.join(os.getcwd(), file), os.path.join(experiment_path, 'code', file))
 
         # Initialize paths
         for player in self._players:
             name = player.name
-            if not os.path.exists(os.getcwd() + experiment + f'/checkpoints/{name}'):
-                os.mkdir(os.getcwd() + experiment + f'/checkpoints/{name}')
-            for training_phase in ["part1", "part2", "part3"]:
-                if not os.path.exists(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}'):
-                    os.mkdir(os.getcwd() + experiment + f'/checkpoints/{name}/{training_phase}')
-    def continue_experiment(self):
-        self.start_tensorboard()
+            os.makedirs(os.path.join(experiment_path, 'checkpoints', name), exist_ok=True)
+            for training_phase in ["part1"]:
+                os.makedirs(os.path.join(experiment_path, 'checkpoints', name, training_phase), exist_ok=True)
+            for competition_phase in [p.name for p in self._players]:
+                os.makedirs(os.path.join(experiment_path, 'competition', name, competition_phase), exist_ok=True)
 
-        total = int(self.numEpisodes/self.numEpisodesPerRound)
+        # Initialize record of completed parts
+        self._training_done, self._competition_done = self.admin_of_completed_tasks()
+
+    def admin_of_completed_tasks(self):
+        training_done = []
+        competition_done = []
         for p in self._players:
-            # Part 1 - Against still player
-            part1_done = len(os.listdir(os.getcwd()+f'{self._experiment}/checkpoints/{p._name}/part1'))
-            if part1_done == total:
-                pass
-            else:
+            # The amount of checkpoints say something about the progress of training
+            training_done += [len(
+                [f for f in os.listdir(os.path.join(os.getcwd(), self._experiment, 'checkpoints', p._name, 'part1')) if
+                 '-next-state' not in f]) >= self._total_n_training]
 
-                # If state exists, load state
+            # The existence of competition results say something about the progress of competition
+            competition_done += [[os.path.exists(os.path.join(os.getcwd(), self._experiment, 'competition', p.name, p2.name, 'results.csv')) for p2 in self._players]]
+
+        return training_done, competition_done
+
+    def continue_experiment(self):
+
+        # Show tensorboard command (use start_tensorboard_live for continuous updates: prone to failures)
+        tf_logs = TensorBoardLogs(self._experiment)
+        tf_logs.tensorboard_command()
+
+        # Every player has a training program and competition
+        # Update admin on which player has completed which program and/or competition
+        self._training_done, self._competition_done = self.admin_of_completed_tasks()
+
+        for ix, p in enumerate(self._players):
+            print(p.name)
+
+            if self._training_done[ix] is False:
+
+                # If there is an existing training, continue there
                 if os.path.exists(p._state_path):
                     arn = pickle.load(open(p._state_path, "rb", -1))
-                    p = arn.modertr.players[0]
+                    p.step = arn.step
+                    p._eps = arn._eps
+                    p._cnt = arn.cnt
                     p.reload()
-                else:
-                    ps = StillPlayer(name='Stable Sef')
-                    mdrtr = Moderator([p, ps], experiment=self._experiment)
-                    arn = Arena(mdrtr, training_phase="part1")
-
-                arn.play_and_learn()
-
-            # Part 2 - Against random player
-            p.reload()
-            p.new_part("part1", "part2")
-            p.set_eps(p.maxEpsilon)
-            part2_done = len(os.listdir(os.getcwd() + f'{self._experiment}/checkpoints/{p._name}/part2'))
-            if part2_done == total:
-                pass
-            else:
-
-                # If state exists, load state
-                if os.path.exists(p._state_path):
-                    arn = pickle.load(open(p._state_path, "rb", -1))
-                    p = arn.modertr.players[0]
-                    p.reload()
-                else:
-                    pr = RandomPlayer(name='Randy Rado')
-                    mdrtr = Moderator([p, pr], experiment=self._experiment)
-                    arn = Arena(mdrtr, training_phase="part2")
-
-                arn.play_and_learn()
-
-            # Part 3 - against oneself
-            p.reload()
-            p.new_part("part2", "part3")
-            p.set_eps(p.maxEpsilon)
-            part3_done = len(os.listdir(os.getcwd() + f'{self._experiment}/checkpoints/{p._name}/part3'))
-            if part3_done == total:
-                pass
-            else:
-
-                # If state exists, load state
-                if os.path.exists(p._state_path):
-                    arn = pickle.load(open(p._state_path, "rb", -1))
-                    for player in arn.modertr.players:
-                        player.reload()
+                    mdrtr = Moderator([p, p], experiment=self._experiment)
+                    arn.modertr = mdrtr
                 else:
                     mdrtr = Moderator([p, p], experiment=self._experiment)
-                    arn = Arena(mdrtr, training_phase="part3")
+                    arn = Arena(mdrtr, training_phase="part1")
 
-                arn.play_and_learn()
-    def start_tensorboard(self):
-        tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', self._experiment[1:]+'/logs', '--port', '6006'])
-        url = tb.launch()
-        print(f"TensorBoard is running at {url}")
+                # Play and learn in the arena!
+                arn.play_and_learn(mode='parallel')
+
+                # Update admin
+                self._training_done, self._competition_done = self.admin_of_completed_tasks()
+
+            if all(self._competition_done[ix]) == False:
+                for icomp, comp_done in enumerate(self._competition_done[ix]):
+                    # Compete against all players who completed training and whom the current player did not yet play against
+                    if (comp_done is False) and (self._training_done[ix] is True) and (self._training_done[icomp] is True):
+
+                        # Initialize competition
+                        ps = [self._players[ix], self._players[icomp]]
+                        for p in ps:
+                            p.reload()
+                        start = datetime.datetime.now().strftime('%Y%m%d-%H%M')
+                        start_lens_runner = []; start_lens_tagger = []; unique_players = list(set(ps))
+                        for p in unique_players:
+                            start_lens_runner += [len(p._reward_store_runner)]
+                            start_lens_tagger += [len(p._reward_store_tagger)]
+
+                        # Start the competition
+                        print(f"{ps[0].name} is competing against {ps[1].name}")
+                        mdrtr = Moderator(ps, experiment=self._experiment)
+                        arn = Arena(mdrtr, training_phase="part2")
+                        arn.competition()
+
+                        results = {'player1': ps[0].name, 'player2': ps[1].name, 'start_time': start, 'end_time': datetime.datetime.now().strftime('%Y%m%d-%H%M')}
+                        for i, p in enumerate(unique_players):
+                            start_len_runner = start_lens_runner[i]
+                            start_len_tagger = start_lens_tagger[i]
+                            results[f'player{i+1}_tagger_mean'] = np.mean(p.reward_store_tagger[start_len_tagger:])
+                            results[f'player{i+1}_runner_mean'] = np.mean(p.reward_store_runner[start_len_runner:])
+                            results[f'player{i+1}_tagger_median'] = np.median(p.reward_store_tagger[start_len_tagger:])
+                            results[f'player{i+1}_runner_median'] = np.median(p.reward_store_runner[start_len_runner:])
+                            results[f'player{i+1}_tagger_len'] = len(p.reward_store_tagger[start_len_tagger:])
+                            results[f'player{i+1}_runner_len'] = len(p.reward_store_runner[start_len_runner:])
+                            results[f'player{i+1}_tagger_all'] = str(p.reward_store_tagger[start_len_tagger:])
+                            results[f'player{i+1}_runner_all'] = str(p.reward_store_runner[start_len_runner:])
+
+                        df = pd.DataFrame(results, index=[0])
+                        df.to_csv(os.path.join(os.getcwd(), self._experiment, 'competition', ps[0].name, ps[1].name, 'results.csv'), index=False)
+                        df.to_csv(os.path.join(os.getcwd(), self._experiment, 'competition', ps[1].name, ps[0].name, 'results.csv'), index=False)
+
+        # Update admin
+        self._training_done, self._competition_done = self.admin_of_completed_tasks()
+        if all(self._training_done) and all([all(c) for c in self._competition_done]):
+            sys.exit(1)

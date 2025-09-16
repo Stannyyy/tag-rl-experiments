@@ -2,11 +2,8 @@
 import time
 import numpy as np
 from config import Config
-import os
 import pickle
-import tensorflow as tf
 import datetime
-import sys
 
 # Arena
 class Arena(Config):

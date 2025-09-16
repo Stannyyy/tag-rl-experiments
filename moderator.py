@@ -246,7 +246,7 @@ class Moderator(Config):
 
             # Learn!
             if learn:
-                prev_loss = 1000; min_learn_cycles = 10; learn_cycle = 0
+                prev_loss = 1000; min_learn_cycles = 3; learn_cycle = 0
                 while True:
                     p.learn_by_replay(len(p._memory._samples), epochs=1, verbose=True)
                     p.step +=1

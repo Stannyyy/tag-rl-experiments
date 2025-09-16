@@ -1,7 +1,7 @@
 # Import packages
 import sys
 import datetime
-from experiment5 import Experiment
+from experiment import Experiment
 
 # Experiment
 experiment = sys.argv[1]

@@ -17,8 +17,8 @@ import tensorflow as tf
 # Player
 class Player(Model, ModelNextState, Memory):
 
-    def __init__(self, experiment, name, bootstrapValueEpsilon=0.0005, discountFactor=0.975,
-                 learningRate=0.001, layers=[100, 100, 100], addLSTM=False, sequenceLengthLSTM=1,
+    def __init__(self, experiment, name, bootstrapValueEpsilon=0.001, discountFactor=0.99,
+                 learningRate=0.0001, layers=[100, 100, 100], addLSTM=False, sequenceLengthLSTM=1,
                  render=False, justLike=None, testMode=False, curiosity=False, curiosity_beta=0,
                  maxEpsilon=None, preselectBatch=False,
                  useProbabilities=False, numStatesOverwrite=None, numActionsOverwrite=None):
@@ -145,9 +145,9 @@ class Player(Model, ModelNextState, Memory):
                     last_x_minus_1_samples = []
                 else:
                     last_x_minus_1_samples = self._memory._samples[(self._model._sequence_length_LSTM * -1 + 1):]
-                prediction = self.predict_one([[s[0] for s in last_x_minus_1_samples] + [self._state]])
+                prediction = self.predict_one(np.array([[s[0] for s in last_x_minus_1_samples] + [self._state]]))
             else:
-                prediction = self.predict_one([self._state])
+                prediction = self.predict_one(np.array([self._state]))
             prediction = [p if i in options else -np.inf for i, p in enumerate(prediction)]
 
         if self._use_probabilities and (save_game == False):
@@ -176,9 +176,9 @@ class Player(Model, ModelNextState, Memory):
             return all_choices
         else:
             if len(slct) > 1:
-                prediction = self.predict_batch([state for ix, state in enumerate(self._state_many) if ix in slct])
+                prediction = self.predict_batch(np.array([state for ix, state in enumerate(self._state_many) if ix in slct]))
             elif len(slct) == 1:
-                prediction = self.predict_batch([[self._state_many[slct[0]]]])
+                prediction = self.predict_batch(np.array([[self._state_many[slct[0]]]]))
                 prediction = np.expand_dims(prediction, axis=0)
             else:
                 prediction = []
