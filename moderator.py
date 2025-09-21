@@ -181,7 +181,7 @@ class Moderator(Config):
 
             # Determine next state
             player = self._players[self._turn]
-            player.options = [[8] if game_overs[ep] else self._games[ep].what_options(self._turn) for ep in range(self.numEpisodesPerRound)]
+            player.options = np.array([[False, False, False, False, False, False, False, False, True] if game_overs[ep] else self._games[ep].what_options(self._turn) for ep in range(self.numEpisodesPerRound)])
 
             # Set new player state
             player.state_many = [(self._games[ep]._x_list,

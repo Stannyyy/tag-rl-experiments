@@ -127,6 +127,35 @@ class Player(Model, ModelNextState, Memory):
         probs[~mask] = 0.0
         return probs
 
+    def prediction_to_probabilities_many(self, predictions, options):
+        """
+        Convert q predictions to probabilities that sum to 1 over finite entries.
+        -inf entries get probability 0.
+        temperature > 1.0 => flatter distribution
+        temperature < 1.0 => sharper distribution
+
+        It is basically normalization then softmax with temperature.
+        """
+
+        temperature = self._eps * 100
+        if temperature <= 0:
+            raise ValueError("temperature must be > 0")
+
+        # Normalize
+        probs = predictions.astype(float, copy=True)
+        probs *= options
+        row_sum = (probs * options.astype(float)).sum(axis=1, keepdims=True)
+        row_mean = row_sum / options.sum(axis=1, keepdims=True)
+
+        predictions -= row_mean
+        # probs[mask] /= np.std(probs[mask])
+
+        # Stable softmax on finite entries
+        predictions = np.exp(predictions / temperature) * options
+        predictions = predictions / np.sum(predictions / temperature * options, axis=1, keepdims=True)
+
+        return predictions
+
     def choose_action(self, options, save_game):
 
         """
@@ -176,25 +205,23 @@ class Player(Model, ModelNextState, Memory):
             return all_choices
         else:
             if len(slct) > 1:
-                prediction = self.predict_batch(np.array([state for ix, state in enumerate(self._state_many) if ix in slct]))
+                predictions = self.predict_batch(np.array([state for ix, state in enumerate(self._state_many) if ix in slct]))
             elif len(slct) == 1:
-                prediction = self.predict_batch(np.array([[self._state_many[slct[0]]]]))
-                prediction = np.expand_dims(prediction, axis=0)
+                predictions = self.predict_batch(np.array([[self._state_many[slct[0]]]]))
+                predictions = np.expand_dims(predictions, axis=0)
             else:
-                prediction = []
-            for ep in range(self.numEpisodesPerRound):
-                if ep in slct:
-                    for i, p in enumerate(prediction[slct.index(ep)]):
-                        prediction[slct.index(ep)][i] = p if i in options[ep] else -np.inf
+                predictions = []
 
-        choices = []
+            # Filter options
+            predictions = predictions.astype(float, copy=False)
+
         if self._use_probabilities:
-            for p in prediction:
-                probabilities = self.prediction_to_probabilities(p)
-                choices.append(int(np.random.choice(self.numActions, p=probabilities)))
+            probabilities = self.prediction_to_probabilities_many(predictions, options[slct])
+            choices = np.array([np.random.choice(self.numActions, p=row) for row in probabilities])
+
         else:
-            for p in prediction:
-                choices.append(int(np.argmax(p)))
+            predictions[~options] = -np.inf
+            choices = np.argmax(predictions)
 
         all_choices = []
         for ep in range(self.numEpisodesPerRound):

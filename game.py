@@ -70,8 +70,7 @@ class Game(Config):
         self._ended = 0
         self._tag_happened = False
 
-    # Move options
-    def what_options(self, turn):
+    def what_options_bu(self, turn):
 
         """
         Check what move options the player has
@@ -103,6 +102,38 @@ class Game(Config):
         options = [o for o in options if o != -1]
         return options
 
+    # Move options
+    def what_options(self, turn):
+
+        """
+        Check what move options the player has
+        """
+
+        # Get x and y position of the player whose turn it is
+        x = self._x_list[turn]
+        y = self._y_list[turn]
+
+        # For different scenario's, rule out options
+        options = np.ones(np.shape(self._options), dtype=bool)
+        if y == 0:
+            options[0] = False
+            options[4] = False
+            options[5] = False
+        if y == self.gridSize - 1:
+            options[1] = False
+            options[6] = False
+            options[7] = False
+        if x == 0:
+            options[2] = False
+            options[4] = False
+            options[6] = False
+        if x == self.gridSize - 1:
+            options[3] = False
+            options[5] = False
+            options[7] = False
+
+        return options
+
     def change_position(self, choice, x, y):
 
         """
@@ -131,7 +162,7 @@ class Game(Config):
 
         # Validate move choice
         valid = self.what_options(turn)
-        if choice not in valid:
+        if choice not in list(np.where(valid)[0]):
             raise ValueError(f"Invalid move choice {choice} for turn {turn}. Valid: {valid}")
 
         x = self._x_list[turn]
