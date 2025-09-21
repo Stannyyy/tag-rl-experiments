@@ -234,8 +234,11 @@ class Moderator(Config):
                 # Load samples to memory
                 ep_samples = p.memory_many[ep].samples
                 unique_ep_samples = []
+                count_end_states = 0
                 for ep_sample in ep_samples:
-                    if ep_sample not in unique_ep_samples:
+                    if ep_sample[3] is None:
+                        count_end_states += 1
+                    if (ep_sample not in unique_ep_samples) & (count_end_states <= self.numPlayers):
                         unique_ep_samples.append(ep_sample)
                         p._memory._sample = ep_sample
                         p._memory.add_sample()
@@ -246,7 +249,7 @@ class Moderator(Config):
 
             # Learn!
             if learn:
-                prev_loss = 1000; min_learn_cycles = 3; learn_cycle = 0
+                prev_loss = 1000; min_learn_cycles = 10; learn_cycle = 0
                 while True:
                     p.learn_by_replay(len(p._memory._samples), epochs=1, verbose=True)
                     p.step +=1

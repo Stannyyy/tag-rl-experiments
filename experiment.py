@@ -23,12 +23,16 @@ class Experiment():
         self._total_n_competition = int(self.numPlayers)
 
         # Player definition
-        p00 = Player(experiment, name='learningRate=0.01', learningRate=0.01)
-        p01 = Player(experiment, name='learningRate=0.001', learningRate=0.001)
-        p02 = Player(experiment, name='learningRate=0.0001', learningRate=0.0001)
-        p03 = Player(experiment, name='learningRate=0.00001', learningRate=0.00001)
+        # p00 = Player(experiment, name='learningRate=0.01', learningRate=0.01, useProbabilities=True)
+        # p01 = Player(experiment, name='learningRate=0.001', learningRate=0.001, useProbabilities=True)
+        # p02 = Player(experiment, name='learningRate=0.0001', learningRate=0.0001, useProbabilities=True)
+        # p03 = Player(experiment, name='learningRate=0.00001', learningRate=0.00001, useProbabilities=True)
+        # p04 = Player(experiment, name='learningRate=0.01;preselect', learningRate=0.01, useProbabilities=True, preselectBatch=True)
+        # p05 = Player(experiment, name='learningRate=0.001;preselect', learningRate=0.001, useProbabilities=True, preselectBatch=True)
+        # p06 = Player(experiment, name='learningRate=0.0001;preselect', learningRate=0.0001, useProbabilities=True, preselectBatch=True)
+        p07 = Player(experiment, name='learningRate=0.00001;preselect', learningRate=0.00001, useProbabilities=True, preselectBatch=True)
 
-        self._players = [p00, p01, p02, p03]
+        self._players = [p07]#[p00, p01, p02, p03, p04, p05, p06, p07]
 
         # Initialize results paths
         experiment_path = os.path.join(os.getcwd(), experiment)
