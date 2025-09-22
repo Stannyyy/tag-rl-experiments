@@ -201,7 +201,24 @@ class Player(Model, ModelNextState, Memory):
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
         if chance_value < self._eps:
-            all_choices = [random.sample(options[ep], k=1)[0] if ep in slct else 8 for ep in range(self.numEpisodesPerRound)]
+            # Vectorized parsing of options to be able to choose an action randomly
+            rows, cols = options.nonzero()
+            counts = np.bincount(rows, minlength=options.shape[0])
+            starts = np.cumsum(np.r_[0, counts[:-1]])
+
+            # Create a mask that can filter slct
+            slct_mask = np.zeros(options.shape[0], dtype=bool)
+            slct_mask[np.fromiter(slct, dtype=int, count=len(slct))] = True
+            eligible_rows = np.where(slct_mask & (counts > 0))[0]
+
+            # Random choice
+            rng = np.random.default_rng()
+            r = rng.integers(0, counts[eligible_rows])
+
+            # Vector of all choices
+            picked_cols = cols[starts[eligible_rows] + r]
+            all_choices = np.full(options.shape[0], 8, dtype=int)
+            all_choices[eligible_rows] = picked_cols
             return all_choices
         else:
             if len(slct) > 1:
