@@ -17,7 +17,7 @@ import tensorflow as tf
 # Player
 class Player(Model, ModelNextState, Memory):
 
-    def __init__(self, experiment, name, bootstrapValueEpsilon=0.001, discountFactor=0.99,
+    def __init__(self, experiment, name, bootstrapValueEpsilon=0.0001, discountFactor=0.99,
                  learningRate=0.0001, layers=[100, 100, 100], addLSTM=False, sequenceLengthLSTM=1,
                  render=False, justLike=None, testMode=False, curiosity=False, curiosity_beta=0,
                  maxEpsilon=None, preselectBatch=False,
