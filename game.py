@@ -161,8 +161,8 @@ class Game(Config):
         """
 
         # Validate move choice
-        valid = self.what_options(turn)
-        if choice not in list(np.where(valid)[0]):
+        valid = [int(i) for i in np.where(self.what_options(turn))[0]]
+        if choice not in valid:
             raise ValueError(f"Invalid move choice {choice} for turn {turn}. Valid: {valid}")
 
         x = self._x_list[turn]

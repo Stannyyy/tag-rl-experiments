@@ -92,7 +92,7 @@ class Player(Model, ModelNextState, Memory):
         exec(self._tboard_callback_command)
 
 
-    def prediction_to_probabilities(self, prediction):
+    def prediction_to_probabilities(self, prediction, options):
         """
         Convert q predictions to probabilities that sum to 1 over finite entries.
         -inf entries get probability 0.
@@ -108,7 +108,7 @@ class Player(Model, ModelNextState, Memory):
 
         # Filter infinite values (not an option)
         probs = np.asarray(prediction, dtype=float)
-        mask = np.isfinite(probs)
+        mask = np.where(options)[0]
 
         # Normalize
         probs[mask] -= np.mean(probs[mask])
@@ -152,7 +152,7 @@ class Player(Model, ModelNextState, Memory):
 
         # Stable softmax on finite entries
         predictions = np.exp(predictions / temperature) * options
-        predictions = predictions / np.sum(predictions / temperature * options, axis=1, keepdims=True)
+        predictions = predictions / np.sum(predictions * options, axis=1, keepdims=True)
 
         return predictions
 
@@ -177,12 +177,12 @@ class Player(Model, ModelNextState, Memory):
                 prediction = self.predict_one(np.array([[s[0] for s in last_x_minus_1_samples] + [self._state]]))
             else:
                 prediction = self.predict_one(np.array([self._state]))
-            prediction = [p if i in options else -np.inf for i, p in enumerate(prediction)]
 
         if self._use_probabilities and (save_game == False):
-            probabilities = self.prediction_to_probabilities(prediction)
+            probabilities = self.prediction_to_probabilities(prediction, options)
             choice = int(np.random.choice(self.numActions, p=probabilities))
         else:
+            prediction[~options] = -np.inf
             choice = int(np.argmax(prediction))
 
         return choice

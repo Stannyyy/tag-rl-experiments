@@ -1,6 +1,7 @@
 # Import packages
 import copy
 from config import Config
+import numpy as np
 
 # Memory
 class Memory(Config):
@@ -48,6 +49,7 @@ class Memory(Config):
         if options is None:
             self._sample += [None, None]
         if len(self._sample) == 3:
+            options = np.where(options)[0].tolist()
             self._sample += [state, options]
 
     def add_corrected_sample(self, tag_happened):
