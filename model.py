@@ -131,16 +131,17 @@ class Model(Config):
 
         return np.squeeze(predictions)
 
-    def train_batch(self, x_batch, y_batch, step, callback, log_dir, epochs=1, verbose=False):
+    def train_batch(self, x_batch, y_batch, cnt, log_dir, epochs=1, verbose=False):
         """
         Train one batch and log the training loss
         Returns a summary dict for the tensorboard
         """
 
         # Train batch
-        tf.profiler.experimental.start(log_dir)
-        log = self._model.fit(x_batch, y_batch, epochs=epochs, verbose=verbose)
-        tf.profiler.experimental.stop()
+        # tf.profiler.experimental.start(log_dir)
+        callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
+        log = self._model.fit(x_batch, y_batch, epochs=epochs, verbose=verbose, callbacks=[callback])
+        # tf.profiler.experimental.stop()
 
         # Add losses to log
         self._losses += log.history.get('loss')
@@ -149,7 +150,7 @@ class Model(Config):
         return {
             "name": 'params/losses',
             "value": np.round(log.history.get('loss'),5)[0],
-            "step": step
+            "step": cnt
         }
 
     def save_checkpoint(self, cnt, name, training_phase):
@@ -257,7 +258,7 @@ class ModelNextState(Config):
 
         return np.squeeze(predictions)
 
-    def train_batch_next_state(self, x_batch, y_batch, step):
+    def train_batch_next_state(self, x_batch, y_batch, cnt):
         """
         Train one batch and log the training loss
         Returns a summary dict for the tensorboard
@@ -273,7 +274,7 @@ class ModelNextState(Config):
         return {
                 "name": 'params/losses-next-state',
                 "value": np.round(log.history.get('loss'),5)[0],
-                "step": step
+                "step": cnt
              }
 
     def save_checkpoint_next_state(self, cnt, name, training_phase):

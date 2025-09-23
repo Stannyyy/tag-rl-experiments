@@ -431,13 +431,12 @@ class Player(Model, ModelNextState, Memory):
             corrected_qs_selection = corrected_qs
 
         # Train batch
-        summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self._step,
-                                                         self._tboard_callback, self._log_path,
-                                                         epochs=epochs, verbose=verbose)
+        summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self._cnt,
+                                                         self._log_path, epochs=epochs, verbose=verbose)
         self._summary_writer_collection += [summary_writer_collection_add]
         if self._curiosity:
             # Train batch next state
-            summary_writer_collection_add = self.train_batch_next_state(all_states, all_next_states, self._step)
+            summary_writer_collection_add = self.train_batch_next_state(all_states, all_next_states, self._cnt)
             self._summary_writer_collection += [summary_writer_collection_add]
         self.update_epsilon()
 
@@ -446,7 +445,7 @@ class Player(Model, ModelNextState, Memory):
         self._summary_writer_collection += [
             {"name": 'Q/overall',
              "value": np.round(np.mean(np.abs(q_s_a_uncorrected)), 1),
-             "step": self._step}
+             "step": self._cnt}
         ]
         if np.sum(end_state) > 0:
             uncorrected_end_qs = q_s_a_uncorrected[end_state]
@@ -458,32 +457,32 @@ class Player(Model, ModelNextState, Memory):
                 {
                     "name": 'Q/tagged-state-of-crucial-action',
                     "value": np.round(np.mean(np.abs(q_crucial_action)), 1),
-                    "step": self._step
+                    "step": self._cnt
                 },
                 {
                     "name": 'Q/tagged-state-of-alternative-action',
                     "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._step
+                    "step": self._cnt
                 },
                 {
                     "name": 'Q/diff-rel',
                     "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._step
+                    "step": self._cnt
                 },
                 {
                     "name": 'Q/diff-abs',
                     "value": np.round(np.mean(np.abs(q_crucial_action)) - np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._step
+                    "step": self._cnt
                 },
                 {
                     "name": 'Q/tagged-state-of-crucial-action-norm',
                     "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_s_a_uncorrected)), 1),
-                    "step": self._step
+                    "step": self._cnt
                 },
                 {
                     "name": 'Q/tagged-state-of-alternative-action-norm',
                     "value": np.round(np.mean(np.abs(q_alternative_action)) / np.mean(np.abs(q_s_a_uncorrected)), 1),
-                    "step": self._step
+                    "step": self._cnt
                 },
             ]
         return 1
