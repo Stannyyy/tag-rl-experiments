@@ -50,7 +50,7 @@ class Memory(Config):
             self._sample += [None, None]
         if len(self._sample) == 3:
             options = np.where(options)[0].tolist()
-            self._sample += [state, options]
+            self._sample += [state, list(options)]
 
     def add_corrected_sample(self, tag_happened):
 

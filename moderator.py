@@ -252,18 +252,8 @@ class Moderator(Config):
 
             # Learn!
             if learn:
-                prev_loss = 1000; min_learn_cycles = 10; learn_cycle = 0
-                while True:
-                    p.learn_by_replay(len(p._memory._samples), epochs=1, verbose=True)
-                    p.step +=1
-                    loss = [c.get('value') for c in p._summary_writer_collection if c.get('name') == 'params/losses'][-1]
-                    learn_cycle += 1
-                    print(f"Prev {prev_loss} now {loss}, with learn cycle {learn_cycle}")
-                    if prev_loss < loss:
-                        if learn_cycle > min_learn_cycles:
-                            break
-                    prev_loss = loss
-
+                p.learn_by_replay(len(p._memory._samples), epochs=100, verbose=True)
+                p.step +=1
 
     def write_video_text(self):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \
