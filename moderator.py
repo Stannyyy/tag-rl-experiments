@@ -252,7 +252,7 @@ class Moderator(Config):
 
             # Learn!
             if learn:
-                p.learn_by_replay(len(p._memory._samples), epochs=100, verbose=True)
+                p.learn_by_replay(len(p._memory._samples), epochs=10, verbose=True)
                 p.step +=1
 
     def write_video_text(self):
