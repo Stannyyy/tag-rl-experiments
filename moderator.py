@@ -238,13 +238,10 @@ class Moderator(Config):
                 for ep_sample in ep_samples:
                     if ep_sample[3] is None:
                         count_end_states += 1
-                    try:
-                        if (ep_sample not in unique_ep_samples) & (count_end_states <= self.numPlayers):
-                            unique_ep_samples.append(ep_sample)
-                            p._memory._sample = ep_sample
-                            p._memory.add_sample()
-                    except Exception as e:
-                        print(e)
+                    if (ep_sample not in unique_ep_samples) & (count_end_states <= self.numPlayers):
+                        unique_ep_samples.append(ep_sample)
+                        p._memory._sample = ep_sample
+                        p._memory.add_sample()
 
             # Add rewards
             p.update_reward_store()

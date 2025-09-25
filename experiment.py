@@ -30,10 +30,10 @@ class Experiment():
         # p04 = Player(experiment, name='learningRate=0.01;preselect', learningRate=0.01, useProbabilities=True, preselectBatch=True)
         # p05 = Player(experiment, name='learningRate=0.001;preselect', learningRate=0.001, useProbabilities=True, preselectBatch=True)
         # p06 = Player(experiment, name='learningRate=0.0001;preselect', learningRate=0.0001, useProbabilities=True, preselectBatch=True)
-        p07 = Player(experiment, name='learningRate=0.00001;preselect', learningRate=0.00001, useProbabilities=True, preselectBatch=True)
+        # p07 = Player(experiment, name='learningRate=0.00001;preselect', learningRate=0.00001, useProbabilities=True, preselectBatch=True)
         p08 = Player(experiment, name='learningRate=0.00001;preselect;10epochs', learningRate=0.00001, useProbabilities=True, preselectBatch=True)
 
-        self._players = [p07, p08]#[p00, p01, p02, p03, p04, p05, p06, p07]
+        self._players = [p08]#[p00, p01, p02, p03, p04, p05, p06, p07]
 
         # Initialize results paths
         experiment_path = os.path.join(os.getcwd(), experiment)

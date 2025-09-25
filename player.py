@@ -13,6 +13,8 @@ import math
 from model import Model, ModelNextState
 from memory import Memory
 import tensorflow as tf
+import copy
+import datetime
 
 # Player
 class Player(Model, ModelNextState, Memory):
@@ -187,6 +189,14 @@ class Player(Model, ModelNextState, Memory):
 
         return choice
 
+    def options_to_elligible_idx(self, options):
+        # Vectorized parsing of options to be able to choose an action randomly
+        idx_options = options.nonzero()[1]
+        option_counts = options.sum(axis=1)
+        starts = np.cumsum(np.r_[0, option_counts[:-1]])
+
+        return option_counts, idx_options, starts
+
     def choose_many_actions(self, options, slct):
 
         """
@@ -201,24 +211,18 @@ class Player(Model, ModelNextState, Memory):
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
         if chance_value < self._eps:
-            # Vectorized parsing of options to be able to choose an action randomly
-            rows, cols = options.nonzero()
-            counts = np.bincount(rows, minlength=options.shape[0])
-            starts = np.cumsum(np.r_[0, counts[:-1]])
 
-            # Create a mask that can filter slct
-            slct_mask = np.zeros(options.shape[0], dtype=bool)
-            slct_mask[np.fromiter(slct, dtype=int, count=len(slct))] = True
-            eligible_rows = np.where(slct_mask & (counts > 0))[0]
+            # Dissect options
+            option_counts, idx_options, starts = self.options_to_elligible_idx(options)
 
             # Random choice
             rng = np.random.default_rng()
-            r = rng.integers(0, counts[eligible_rows])
+            r = rng.integers(0, option_counts)[slct]
 
             # Vector of all choices
-            picked_cols = cols[starts[eligible_rows] + r]
+            picked_cols = idx_options[starts[slct] + r]
             all_choices = np.full(options.shape[0], 8, dtype=int)
-            all_choices[eligible_rows] = picked_cols
+            all_choices[slct] = picked_cols
             return all_choices
         else:
             if len(slct) > 1:
@@ -353,6 +357,7 @@ class Player(Model, ModelNextState, Memory):
         """
 
         # If batch_size undefined, fill with config batch size
+        start = datetime.datetime.now()
         if batch_size is None:
             if self._preselect_batch:
                 batch_size = int(self.batchSize * 4)
@@ -368,66 +373,56 @@ class Player(Model, ModelNextState, Memory):
         if not batch:
             return 0
 
+        # Extract samples
+        states = np.array([b[-1][0] for b in batch], dtype=float)
+        actions = np.array([b[-1][1] for b in batch], dtype=int)
+        rewards = np.array([b[-1][2] for b in batch], dtype=float)
+        next_states = np.array([(np.zeros(self.numStates)-1 if val[-2] is None else val[-2]) for seq in batch for val in seq])
+        options = [b[-1][4] for b in batch]
+
+        # Define end states
+        is_terminal = (next_states == -1).all(axis=1)  # vectorized comparison for object array
+        is_nonterminal = ~is_terminal
+
         # Predict Q(s,a) given the batch of states
-        states = np.array([val[0] for seq in batch for val in seq])
         q_s_a = self.predict_batch(states)
-        q_s_a_uncorrected = np.copy(q_s_a)
 
         # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
-        next_states = np.array(
-            [(np.zeros(self.numStates) if val[-2] is None else val[-2]) for seq in batch for val in seq])
         q_s_a_d = self.predict_batch(next_states)
-
-        # Extract slices from batch
-        all_states = np.array([b[0][0] for b in batch]) * 1.0
-        all_next_states = np.array([None if b[0][-2] is None else np.array(b[0][-2]).astype(float) for b in batch], dtype=object)
-        all_rewards = np.array([b[0][2] for b in batch]) * 1.0
-
-        # Set up training arrays
-        corrected_qs = np.zeros((batch_size, self.numActions))
 
         # Bulk predict next state
         if self._curiosity:
-            predicted_next_state = self.predict_batch_next_state(all_states)
+            predicted_next_state = self.predict_batch_next_state(states)
 
-        # Now loop over batch
-        for i, b in enumerate(batch):
+        # Clip corrected q
+        corrected_qs = np.clip(q_s_a, -self.tagPoints, self.tagPoints)
 
-            # Extract sample
-            state, action, reward, next_state, options = b[-1][0], b[-1][1], b[-1][2], b[-1][3], b[-1][4]
+        # Add curiosity bonus
+        if self._curiosity:
+            # Mean-squared error across state dims per row
+            mse = ((predicted_next_state - np.vstack(next_states[is_nonterminal])) ** 2).mean(axis=1)
+            curiosity_bonus = np.zeros(batch_size, dtype=float)
+            curiosity_bonus[is_nonterminal] = self._curiosity_beta * mse
+            rewards += self._curiosity_beta * curiosity_bonus
 
-            # Get the corrected q values for all actions in state
-            corrected_q = q_s_a[i]
+        # Non-terminal states: replace with reward+y*maxQ(s',a')-V(s, a)
+        q_next_states = copy.deepcopy(q_s_a_d)
+        v_current_state = np.sum(q_next_states*np.array(options), axis = 1)/np.sum(options, axis = 1)
+        q_next_states[~np.array(options)] = -np.inf
+        q_next_states = q_next_states.max(axis=1)
+        corrected_qs[np.arange(batch_size),actions] = rewards + self._discountFactor * q_next_states - v_current_state
 
-            # Clip corrected_q
-            corrected_q = [max(min(c * 1.0, self.tagPoints * 1.0), self.tagPoints * -1.0) for c in corrected_q]
-
-            # Update the q value for action
-            if next_state is None:
-                corrected_q[action] = reward
-            else:
-
-                # Curiosity bonus
-                if self._curiosity:
-                    curiosity_bonus = np.mean((predicted_next_state[i] - next_state) ** 2)
-                    reward += self._curiosity_beta * curiosity_bonus
-
-                # Advantage function
-                q_next_state = q_s_a_d[i][options]
-                prediction_next_state = np.amax(q_next_state)
-                v_current_state = np.mean(q_next_state)
-                corrected_q[action] = reward + self._discountFactor * prediction_next_state - v_current_state
-
-            corrected_qs[i] = corrected_q
+        # Overwrite terminal states: replace with reward
+        corrected_qs[is_terminal, actions[is_terminal]] = rewards[is_terminal]
 
         # Filter batch
         if self._preselect_batch:
-            correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a_uncorrected), axis=1),1)
+            correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a), axis=1),1)
             idx_selection = np.argsort(correction_diff)[::-1][:int(batch_size/4)]
-            all_states_selection = all_states[idx_selection]
+            all_states_selection = states[idx_selection]
             corrected_qs_selection = corrected_qs[idx_selection]
         else:
-            all_states_selection = all_states
+            all_states_selection = states
             corrected_qs_selection = corrected_qs
 
         # Train batch
@@ -436,19 +431,19 @@ class Player(Model, ModelNextState, Memory):
         self._summary_writer_collection += [summary_writer_collection_add]
         if self._curiosity:
             # Train batch next state
-            summary_writer_collection_add = self.train_batch_next_state(all_states, all_next_states, self._cnt)
+            summary_writer_collection_add = self.train_batch_next_state(states, next_states, self._cnt)
             self._summary_writer_collection += [summary_writer_collection_add]
         self.update_epsilon()
 
         # Add q to tensorboard
-        end_state = np.abs(all_rewards) >= (self.tagPoints - self.stepPoints * 2)
+        end_state = np.abs(rewards) >= (self.tagPoints - self.stepPoints * 2)
         self._summary_writer_collection += [
             {"name": 'Q/overall',
-             "value": np.round(np.mean(np.abs(q_s_a_uncorrected)), 1),
+             "value": np.round(np.mean(np.abs(q_s_a)), 1),
              "step": self._cnt}
         ]
         if np.sum(end_state) > 0:
-            uncorrected_end_qs = q_s_a_uncorrected[end_state]
+            uncorrected_end_qs = q_s_a[end_state]
             corrected_end_qs = corrected_qs[end_state]
             crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints * 2)
             q_crucial_action = uncorrected_end_qs[crucial_action]
@@ -476,12 +471,12 @@ class Player(Model, ModelNextState, Memory):
                 },
                 {
                     "name": 'Q/tagged-state-of-crucial-action-norm',
-                    "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_s_a_uncorrected)), 1),
+                    "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_s_a)), 1),
                     "step": self._cnt
                 },
                 {
                     "name": 'Q/tagged-state-of-alternative-action-norm',
-                    "value": np.round(np.mean(np.abs(q_alternative_action)) / np.mean(np.abs(q_s_a_uncorrected)), 1),
+                    "value": np.round(np.mean(np.abs(q_alternative_action)) / np.mean(np.abs(q_s_a)), 1),
                     "step": self._cnt
                 },
             ]

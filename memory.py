@@ -26,7 +26,7 @@ class Memory(Config):
 
     def set_sample(self, values):
         choice, reward, state = values
-        self._sample = [state, choice, reward]
+        self._sample = [state, int(choice), reward]
 
     sample = property(get_sample, set_sample)
 
@@ -46,11 +46,10 @@ class Memory(Config):
         Update remaining sample with next state and options for next state
         """
 
-        if options is None:
-            self._sample += [None, None]
+        if state is None:
+            self._sample += [None, [False, False, False, False, False, False, False, False, True]]
         if len(self._sample) == 3:
-            options = np.where(options)[0].tolist()
-            self._sample += [state, list(options)]
+            self._sample += [state, [bool(o) for o in options]]
 
     def add_corrected_sample(self, tag_happened):
 
@@ -67,7 +66,7 @@ class Memory(Config):
         # If no tag happened, check if sample needs correction (if yes add to sample buffer)
         if tag_happened:
             if self._sample[3] is not None:
-                self._sample[3:5] = (None, None)
+                self._sample[3:5] = (None, [False, False, False, False, False, False, False, False, True])
             self._sample_buffer += [copy.deepcopy(self._sample)]
             self.add_sample()
         else:
@@ -102,6 +101,7 @@ class Memory(Config):
 
         # Take the first sample
         i = 0; del_is = []
+
         while len(self._sample_buffer) > (i + 1):
             sample_to_correct = copy.deepcopy(self._sample_buffer[i])
             turn = sample_to_correct[0][-2]
@@ -111,7 +111,7 @@ class Memory(Config):
                 # Find matching sample (same role)
                 if _sample[3] is None and _sample[0][-2] == turn:
                     sample_to_correct[-2] = _sample[0]
-                    sample_to_correct[-1] = [_sample[1]]
+                    sample_to_correct[-1] = _sample[-1]
                     match_found = True
 
                 elif len(_sample) is 5 and _sample[3] is not None and _sample[3][-2] == turn:
