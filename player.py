@@ -357,7 +357,6 @@ class Player(Model, ModelNextState, Memory):
         """
 
         # If batch_size undefined, fill with config batch size
-        start = datetime.datetime.now()
         if batch_size is None:
             if self._preselect_batch:
                 batch_size = int(self.batchSize * 4)
@@ -369,11 +368,13 @@ class Player(Model, ModelNextState, Memory):
             return 0
 
         # Make a random batch
+        print("\rCreating batch")
         batch = self.create_batch(batch_size = batch_size)
         if not batch:
             return 0
 
         # Extract samples
+        print("\rDissecting batch")
         states = np.array([b[-1][0] for b in batch], dtype=float)
         actions = np.array([b[-1][1] for b in batch], dtype=int)
         rewards = np.array([b[-1][2] for b in batch], dtype=float)
@@ -385,20 +386,25 @@ class Player(Model, ModelNextState, Memory):
         is_nonterminal = ~is_terminal
 
         # Predict Q(s,a) given the batch of states
+        print("\rPredicting q's for all states")
         q_s_a = self.predict_batch(states)
 
         # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
+        print("\rPredicting q's for all next states")
         q_s_a_d = self.predict_batch(next_states)
 
         # Bulk predict next state
         if self._curiosity:
+            print("\rPredicting next states for all states")
             predicted_next_state = self.predict_batch_next_state(states)
 
         # Clip corrected q
+        print("\rClipping predicted qs")
         corrected_qs = np.clip(q_s_a, -self.tagPoints, self.tagPoints)
 
         # Add curiosity bonus
         if self._curiosity:
+            print("\rAdding curiosity bonus")
             # Mean-squared error across state dims per row
             mse = ((predicted_next_state - np.vstack(next_states[is_nonterminal])) ** 2).mean(axis=1)
             curiosity_bonus = np.zeros(batch_size, dtype=float)
@@ -406,6 +412,7 @@ class Player(Model, ModelNextState, Memory):
             rewards += self._curiosity_beta * curiosity_bonus
 
         # Non-terminal states: replace with reward+y*maxQ(s',a')-V(s, a)
+        print("\rCorrecting q's of chosen actions of non-terminal states")
         q_next_states = copy.deepcopy(q_s_a_d)
         v_current_state = np.sum(q_next_states*np.array(options), axis = 1)/np.sum(options, axis = 1)
         q_next_states[~np.array(options)] = -np.inf
@@ -413,10 +420,12 @@ class Player(Model, ModelNextState, Memory):
         corrected_qs[np.arange(batch_size),actions] = rewards + self._discountFactor * q_next_states - v_current_state
 
         # Overwrite terminal states: replace with reward
+        print("\rCorrecting q's of chosen actions of terminal states")
         corrected_qs[is_terminal, actions[is_terminal]] = rewards[is_terminal]
 
         # Filter batch
         if self._preselect_batch:
+            print("\rFiltering batch")
             correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a), axis=1),1)
             idx_selection = np.argsort(correction_diff)[::-1][:int(batch_size/4)]
             all_states_selection = states[idx_selection]
@@ -426,6 +435,7 @@ class Player(Model, ModelNextState, Memory):
             corrected_qs_selection = corrected_qs
 
         # Train batch
+        print("\rNow training can start")
         summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self._cnt,
                                                          self._log_path, epochs=epochs, verbose=verbose)
         self._summary_writer_collection += [summary_writer_collection_add]

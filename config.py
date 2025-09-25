@@ -6,7 +6,7 @@ class Config:
                  gridSize = 10,
                  numPlayers = 2, numTaggers = 1,
                  renderSpeed = 0.3, createVideo = True,
-                 numEpisodes = 10000000, numEpisodesPerRound = 10000, minLoss = 1, numGamesShown = 100
+                 numEpisodes = 10000000, numEpisodesPerRound = 100000, minLoss = 1, numGamesShown = 100
                 ):
 
         # Model config

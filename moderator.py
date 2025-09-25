@@ -224,7 +224,7 @@ class Moderator(Config):
             self.next_turn()
             self._turn_counts = [self._turn_counts[ep] if self._games[ep]._ended else self._turn_counts[ep] + 1 for ep in range(self.numEpisodesPerRound)]
 
-        print("\nPlaying over, now preparing to learn")
+        print("\rPlaying over, now preparing to learn")
         p._cnt += self.numEpisodesPerRound
         for p in unique_players:
 
