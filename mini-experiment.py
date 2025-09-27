@@ -9,7 +9,7 @@ import numpy as np
 #         else:
 #             layers += [tf.layers.Dense(layer,
 #                                        activation=tf.layers.LeakyReLU())]
-#     layers += [tf.layers.Dense(self.numActions, activation='linear')]
+#     layers += [tf.layers.Dense(self.num_actions, activation='linear')]
 #     model = tf.models.Sequential(layers)
 #     model.compile(loss='mse', optimizer=tf.optimizers.Adam(learning_rate=self._learning_rate))
 # self._model = model

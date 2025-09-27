@@ -13,7 +13,7 @@ from model import Model, ModelNextState
 from memory import Memory
 import tensorflow as tf
 import copy
-import datetime
+import os
 from config import Config
 
 # Player
@@ -25,38 +25,20 @@ class Player(Config, Model, ModelNextState, Memory):
         super().__init__(**kwargs)
         self.__dict__.update(kwargs)
         if self.curiosity:
-            ModelNextState.__init__(self, experiment=experiment, addLSTM=addLSTM, sequenceLengthLSTM=sequenceLengthLSTM)
+            ModelNextState.__init__(self, experiment=experiment,
+                                    add_lstm=self.add_lstm, sequence_length_lstm=self.sequence_length_lstm)
 
         # Identifying variables
-        self._name = name if justLike is None else justLike._name + name
-        self.isRandom = False
-        self.isStill = False
-
-        # Player variables
-        self._use_probabilities = self.useProbabilities
-        self._preselect_batch = self.preselectBatch
+        self.name = name if justLike is None else justLike.name + name
+        self.is_random = False
+        self.is_still = False
 
         # Model variables
-        self._eps = self.maxEpsilon if justLike is None else justLike._eps
-        self._cnt = 0
-        self._bootstrapValueEpsilon = bootstrapValueEpsilon  # formerly lambda
-        self._discountFactor = discountFactor  # formerly gamma
+        self.eps = self.max_epsilon if justLike is None else justLike.eps
+        self.cnt = 0
 
         # Memory
-        self._memory = Memory(self.maxMemory)
-        self._memories = []
-
-        # Experience variables (carrying over using justLike)
-        self._step = 0 if justLike is None else justLike._step
-
-        # Curiosity variables
-        self._curiosity = curiosity
-        self._curiosity_beta = curiosity_beta
-        if maxEpsilon is not None:
-            self.maxEpsilon = maxEpsilon
-
-        # Render variables
-        self._render = render
+        self.memory = Memory(self.max_memory)
 
         # State variables
         self._state = np.array([])
@@ -68,19 +50,15 @@ class Player(Config, Model, ModelNextState, Memory):
 
         # State variables
         self._reward = 0
-        self._rewards = []
         self._tot_reward_tagger = 0
         self._tot_reward_runner = 0
-        self._options = []
-
-        # Is the player learning? Or temporarily paused due to test mode?
-        self._test_mode = testMode
+        self.options = []
 
         # Save intermittent folders
         self._state_path = os.path.join(os.getcwd(), experiment, "state",
-                                        "part1-" + self._name.replace(" ", "") + ".pickle")
-        self._checkpoint_path = os.path.join(os.getcwd(), experiment, "checkpoints", self._name, "part1")
-        self._log_path = os.path.join(os.getcwd(), experiment, "logs", "dql_" + self._name)
+                                        "part1-" + self.name.replace(" ", "") + ".pickle")
+        self._checkpoint_path = os.path.join(os.getcwd(), experiment, "checkpoints", self.name, "part1")
+        self._log_path = os.path.join(os.getcwd(), experiment, "logs", "dql_" + self.name)
 
         # Set up the tensorboard
         self._summary_writer = tf.summary.create_file_writer(self._log_path)
@@ -99,7 +77,7 @@ class Player(Config, Model, ModelNextState, Memory):
         It is basically normalization then softmax with temperature.
         """
 
-        temperature = self._eps * 100
+        temperature = self.eps * 100
         if temperature <= 0:
             raise ValueError("temperature must be > 0")
 
@@ -134,7 +112,7 @@ class Player(Config, Model, ModelNextState, Memory):
         It is basically normalization then softmax with temperature.
         """
 
-        temperature = self._eps * 100
+        temperature = self.eps * 100
         if temperature <= 0:
             raise ValueError("temperature must be > 0")
 
@@ -161,7 +139,7 @@ class Player(Config, Model, ModelNextState, Memory):
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
-        if (chance_value < self._eps) and (save_game == False):
+        if (chance_value < self.eps) and (save_game == False):
             choice = random.sample(options, k=1)[0]
             return choice
         else:
@@ -170,14 +148,14 @@ class Player(Config, Model, ModelNextState, Memory):
                 if ix_sequence_start == 0:
                     last_x_minus_1_samples = []
                 else:
-                    last_x_minus_1_samples = self._memory._samples[(self._model._sequence_length_LSTM * -1 + 1):]
+                    last_x_minus_1_samples = self.memory._samples[(self._model._sequence_length_LSTM * -1 + 1):]
                 prediction = self.predict_one(np.array([[s[0] for s in last_x_minus_1_samples] + [self._state]]))
             else:
                 prediction = self.predict_one(np.array([self._state]))
 
-        if self._use_probabilities and (save_game == False):
+        if self.use_probabilities and (save_game == False):
             probabilities = self.prediction_to_probabilities(prediction, options)
-            choice = int(np.random.choice(self.numActions, p=probabilities))
+            choice = int(np.random.choice(self.num_actions, p=probabilities))
         else:
             prediction[~options] = -np.inf
             choice = int(np.argmax(prediction))
@@ -205,7 +183,7 @@ class Player(Config, Model, ModelNextState, Memory):
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
-        if chance_value < self._eps:
+        if chance_value < self.eps:
 
             # Dissect options
             option_counts, idx_options, starts = self.options_to_elligible_idx(options)
@@ -231,16 +209,16 @@ class Player(Config, Model, ModelNextState, Memory):
             # Filter options
             predictions = predictions.astype(float, copy=False)
 
-        if self._use_probabilities:
+        if self.use_probabilities:
             probabilities = self.prediction_to_probabilities_many(predictions, options[slct])
-            choices = np.array([np.random.choice(self.numActions, p=row) for row in probabilities])
+            choices = np.array([np.random.choice(self.num_actions, p=row) for row in probabilities])
 
         else:
             predictions[~options] = -np.inf
             choices = np.argmax(predictions)
 
         all_choices = []
-        for ep in range(self.numEpisodesPerRound):
+        for ep in range(self.num_episodes_per_round):
             if ep in slct:
                 all_choices.append(choices[slct.index(ep)])
             else:
@@ -259,10 +237,10 @@ class Player(Config, Model, ModelNextState, Memory):
                 tf.summary.scalar(s.get('name'), s.get('value'), step=s.get('step'))
         self._summary_writer_collection = []
 
-    def get_name(self):
-        return self._name
+    def getname(self):
+        return self.name
 
-    name = property(get_name)
+    name = property(getname)
 
     def get_model(self):
         return self._model
@@ -290,12 +268,12 @@ class Player(Config, Model, ModelNextState, Memory):
     reward_store_runner = property(get_reward_store_runner)
 
     def get_eps(self):
-        return self._eps
+        return self.eps
 
     eps = property(get_eps)
 
     def set_eps(self, eps):
-        self._eps = eps
+        self.eps = eps
 
     eps = property(get_eps, set_eps)
 
@@ -324,24 +302,14 @@ class Player(Config, Model, ModelNextState, Memory):
     state_many = property(get_state_many, set_state_many)
 
     def get_options(self):
-        return self._options
+        return self.options
 
     options = property(get_options)
 
     def set_options(self, options):
-        self._options = options
+        self.options = options
 
     options = property(get_options, set_options)
-
-    def get_step(self):
-        return self._step
-
-    step = property(get_step)
-
-    def set_step(self, step):
-        self._step = step
-
-    step = property(get_step, set_step)
 
     def learn_by_replay(self, batch_size = None, epochs = 1, verbose = False):
 
@@ -353,13 +321,13 @@ class Player(Config, Model, ModelNextState, Memory):
 
         # If batch_size undefined, fill with config batch size
         if batch_size is None:
-            if self._preselect_batch:
-                batch_size = int(self.batchSize * 4)
+            if self.preselect_batch:
+                batch_size = int(self.batch_size * 4)
             else:
-                batch_size = int(self.batchSize)
+                batch_size = int(self.batch_size)
 
         # Only learn once memory has reached batch size and not in test mode
-        if self._test_mode or (len(self._memory._samples) < batch_size):
+        if self.test_mode or (len(self.memory._samples) < batch_size):
             return 0
 
         # Make a random batch
@@ -373,7 +341,7 @@ class Player(Config, Model, ModelNextState, Memory):
         states = np.array([b[-1][0] for b in batch], dtype=float)
         actions = np.array([b[-1][1] for b in batch], dtype=int)
         rewards = np.array([b[-1][2] for b in batch], dtype=float)
-        next_states = np.array([(np.zeros(self.numStates)-1 if val[-2] is None else val[-2]) for seq in batch for val in seq])
+        next_states = np.array([(np.zeros(self.num_states)-1 if val[-2] is None else val[-2]) for seq in batch for val in seq])
         options = [b[-1][4] for b in batch]
 
         # Define end states
@@ -389,22 +357,22 @@ class Player(Config, Model, ModelNextState, Memory):
         q_s_a_d = self.predict_batch(next_states)
 
         # Bulk predict next state
-        if self._curiosity:
+        if self.curiosity:
             print("\rPredicting next states for all states")
             predicted_next_state = self.predict_batch_next_state(states)
 
         # Clip corrected q
         print("\rClipping predicted qs")
-        corrected_qs = np.clip(q_s_a, -self.tagPoints, self.tagPoints)
+        corrected_qs = np.clip(q_s_a, -self.tag_points, self.tag_points)
 
         # Add curiosity bonus
-        if self._curiosity:
+        if self.curiosity:
             print("\rAdding curiosity bonus")
             # Mean-squared error across state dims per row
             mse = ((predicted_next_state - np.vstack(next_states[is_nonterminal])) ** 2).mean(axis=1)
             curiosity_bonus = np.zeros(batch_size, dtype=float)
-            curiosity_bonus[is_nonterminal] = self._curiosity_beta * mse
-            rewards += self._curiosity_beta * curiosity_bonus
+            curiosity_bonus[is_nonterminal] = self.curiosity_beta * mse
+            rewards += self.curiosity_beta * curiosity_bonus
 
         # Non-terminal states: replace with reward+y*maxQ(s',a')-V(s, a)
         print("\rCorrecting q's of chosen actions of non-terminal states")
@@ -412,14 +380,14 @@ class Player(Config, Model, ModelNextState, Memory):
         v_current_state = np.sum(q_next_states*np.array(options), axis = 1)/np.sum(options, axis = 1)
         q_next_states[~np.array(options)] = -np.inf
         q_next_states = q_next_states.max(axis=1)
-        corrected_qs[np.arange(batch_size),actions] = rewards + self._discountFactor * q_next_states - v_current_state
+        corrected_qs[np.arange(batch_size),actions] = rewards + self.discount_factor * q_next_states - v_current_state
 
         # Overwrite terminal states: replace with reward
         print("\rCorrecting q's of chosen actions of terminal states")
         corrected_qs[is_terminal, actions[is_terminal]] = rewards[is_terminal]
 
         # Filter batch
-        if self._preselect_batch:
+        if self.preselect_batch:
             print("\rFiltering batch")
             correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a), axis=1),1)
             idx_selection = np.argsort(correction_diff)[::-1][:int(batch_size/4)]
@@ -431,58 +399,58 @@ class Player(Config, Model, ModelNextState, Memory):
 
         # Train batch
         print("\rNow training can start")
-        summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self._cnt,
+        summary_writer_collection_add = self.train_batch(all_states_selection, corrected_qs_selection, self.cnt,
                                                          self._log_path, epochs=epochs, verbose=verbose)
         self._summary_writer_collection += [summary_writer_collection_add]
-        if self._curiosity:
+        if self.curiosity:
             # Train batch next state
-            summary_writer_collection_add = self.train_batch_next_state(states, next_states, self._cnt)
+            summary_writer_collection_add = self.train_batch_next_state(states, next_states, self.cnt)
             self._summary_writer_collection += [summary_writer_collection_add]
         self.update_epsilon()
 
         # Add q to tensorboard
-        end_state = np.abs(rewards) >= (self.tagPoints - self.stepPoints * 2)
+        end_state = np.abs(rewards) >= (self.tag_points - self.step_points * 2)
         self._summary_writer_collection += [
             {"name": 'Q/overall',
              "value": np.round(np.mean(np.abs(q_s_a)), 1),
-             "step": self._cnt}
+             "step": self.cnt}
         ]
         if np.sum(end_state) > 0:
             uncorrected_end_qs = q_s_a[end_state]
             corrected_end_qs = corrected_qs[end_state]
-            crucial_action = np.abs(corrected_end_qs) >= (self.tagPoints - self.stepPoints * 2)
+            crucial_action = np.abs(corrected_end_qs) >= (self.tag_points - self.step_points * 2)
             q_crucial_action = uncorrected_end_qs[crucial_action]
             q_alternative_action = uncorrected_end_qs[crucial_action == False]
             self._summary_writer_collection += [
                 {
                     "name": 'Q/tagged-state-of-crucial-action',
                     "value": np.round(np.mean(np.abs(q_crucial_action)), 1),
-                    "step": self._cnt
+                    "step": self.cnt
                 },
                 {
                     "name": 'Q/tagged-state-of-alternative-action',
                     "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._cnt
+                    "step": self.cnt
                 },
                 {
                     "name": 'Q/diff-rel',
                     "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._cnt
+                    "step": self.cnt
                 },
                 {
                     "name": 'Q/diff-abs',
                     "value": np.round(np.mean(np.abs(q_crucial_action)) - np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._cnt
+                    "step": self.cnt
                 },
                 {
                     "name": 'Q/tagged-state-of-crucial-action-norm',
                     "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_s_a)), 1),
-                    "step": self._cnt
+                    "step": self.cnt
                 },
                 {
                     "name": 'Q/tagged-state-of-alternative-action-norm',
                     "value": np.round(np.mean(np.abs(q_alternative_action)) / np.mean(np.abs(q_s_a)), 1),
-                    "step": self._cnt
+                    "step": self.cnt
                 },
             ]
         return 1
@@ -491,13 +459,13 @@ class Player(Config, Model, ModelNextState, Memory):
 
         # If batch_size undefined, fill with config batch size
         if batch_size is None:
-            batch_size = int(self.batchSize)
+            batch_size = int(self.batch_size)
 
         # Guard: not enough samples to form a sequence
         if self._add_LSTM:
-            selection_pool_size = len(self._memory._samples) - self._model._sequence_length_LSTM
+            selection_pool_size = len(self.memory._samples) - self._model._sequence_length_LSTM
         else:
-            selection_pool_size = len(self._memory._samples)
+            selection_pool_size = len(self.memory._samples)
 
         if selection_pool_size < batch_size:
             return []
@@ -531,7 +499,7 @@ class Player(Config, Model, ModelNextState, Memory):
                     break
                 selection = random.choices(range(selection_pool_size), k=remaining)
         else:
-            batch = [[self._memory._samples[i]] for i in selection]
+            batch = [[self.memory._samples[i]] for i in selection]
         return batch
 
     def show_q_in_state(self, game):
@@ -550,7 +518,7 @@ class Player(Config, Model, ModelNextState, Memory):
         print('---')
         print(self._state)
         print('---')
-        for row in game._rendered:
+        for row in game.rendered:
             print('|'.join(row))
         print('---')
 
@@ -565,21 +533,21 @@ class Player(Config, Model, ModelNextState, Memory):
         self._summary_writer_collection += [
             {
                 "name": 'params/epsilon',
-                "value": np.round(self._eps, 3),
-                "step": self._step
+                "value": np.round(self.eps, 3),
+                "step": self.cnt
             }
         ]
 
         # Update epsilon
-        self._eps = self.minEpsilon + (self.maxEpsilon - self.minEpsilon) * math.exp(
-            -self._bootstrapValueEpsilon * self._cnt)
+        self.eps = self.min_epsilon + (self.max_epsilon - self.min_epsilon) * math.exp(
+            -self.bootstrap_value_epsilon * self.cnt)
 
     def add_rewards_to_tensorboard(self, turn_count):
         self._summary_writer_collection += [
             {
                 "name": 'Rewards/turn_count',
                 "value": turn_count,
-                "step": self._step
+                "step": self.cnt
             }
         ]
         if self._tot_reward_tagger != 0:
@@ -587,7 +555,7 @@ class Player(Config, Model, ModelNextState, Memory):
                 {
                     "name": 'Rewards/tagger',
                     "value": float(self._tot_reward_tagger),
-                    "step": self._step
+                    "step": self.cnt
                 }
             ]
         if self._tot_reward_runner != 0:
@@ -595,7 +563,7 @@ class Player(Config, Model, ModelNextState, Memory):
                 {
                     "name": 'Rewards/runner',
                     "value": float(self._tot_reward_runner),
-                    "step": self._step
+                    "step": self.cnt
                 }
             ]
 
@@ -605,9 +573,9 @@ class Player(Config, Model, ModelNextState, Memory):
 
     def reload(self):
         if self._add_LSTM:
-            input_shape = (None, self._model._sequence_length_LSTM, self.numStates)
+            input_shape = (None, self._model._sequence_length_LSTM, self.num_states)
         else:
-            input_shape = (None, self.numStates)
+            input_shape = (None, self.num_states)
 
         self.define_model()
         self.model.build(input_shape=input_shape)
@@ -618,7 +586,7 @@ class Player(Config, Model, ModelNextState, Memory):
         if checkpoints:
             self.load_checkpoint(os.path.join(self._checkpoint_path, checkpoints[-1]))
 
-        if self._curiosity:
+        if self.curiosity:
             self.define_model_next_state()
             self.model_next_state.build(input_shape=input_shape)
             checkpoints_next_state = [p for p in os.listdir(self._checkpoint_path) if
@@ -639,12 +607,11 @@ class RandomPlayer():
 
     def __init__(self, name, test_mode=True):
         # Identifying variables
-        self._name = name
-        self.isRandom = True
-        self.isStill = False
+        self.name = name
+        self.is_random = True
+        self.is_still = False
 
         # Collection variables
-        self._step = 0
         self._reward_store_tagger = []
         self._reward_store_runner = []
 
@@ -654,17 +621,17 @@ class RandomPlayer():
         self._tot_reward_runner = 0
 
         # Is the player learning? Or temporarily paused due to test mode?
-        self._test_mode = test_mode
+        self.test_mode = test_mode
 
     def choose_action(self, options, save_game, game=None):
         if not options:
             return 0
         return random.sample(options, k=1)[0]
 
-    def get_name(self):
-        return self._name
+    def getname(self):
+        return self.name
 
-    name = property(get_name)
+    name = property(getname)
 
     def get_reward_store_tagger(self):
         return self._reward_store_tagger
@@ -714,16 +681,6 @@ class RandomPlayer():
 
     def reload(self):
         pass
-
-    def get_step(self):
-        return self._step
-
-    step = property(get_step)
-
-    def set_step(self, step):
-        self._step = step
-
-    step = property(get_step, set_step)
 
 
 # Player
@@ -731,9 +688,9 @@ class StillPlayer():
 
     def __init__(self, name, test_mode=True):
         # Identifying variables
-        self._name = name
-        self.isRandom = True
-        self.isStill = True
+        self.name = name
+        self.is_random = True
+        self.is_still = True
 
         # Collection variables
         self._reward_store_tagger = []
@@ -741,20 +698,19 @@ class StillPlayer():
 
         # State variables
         self._reward = 0
-        self._step = 0
         self._tot_reward_tagger = 0
         self._tot_reward_runner = 0
 
         # Is the player learning? Or temporarily paused due to test mode?
-        self._test_mode = test_mode
+        self.test_mode = test_mode
 
     def choose_action(self, options, save_game, game=None):
         return 8
 
-    def get_name(self):
-        return self._name
+    def getname(self):
+        return self.name
 
-    name = property(get_name)
+    name = property(getname)
 
     def get_reward_store_tagger(self):
         return self._reward_store_tagger
@@ -804,13 +760,3 @@ class StillPlayer():
 
     def reload(self):
         pass
-
-    def get_step(self):
-        return self._step
-
-    step = property(get_step)
-
-    def set_step(self, step):
-        self._step = step
-
-    step = property(get_step, set_step)

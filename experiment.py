@@ -19,20 +19,20 @@ class Experiment():
 
         # Experiment definition
         self._experiment = experiment
-        self._total_n_training = int(self.numEpisodes / self.numEpisodesPerRound)
-        self._total_n_competition = int(self.numPlayers)
+        self._total_n_training = int(self.num_episodes / self.num_episodes_per_round)
+        self._total_n_competition = int(self.num_players)
 
         # Player definition
-        # p00 = Player(experiment, name='learningRate=0.01', learningRate=0.01, useProbabilities=True)
-        # p01 = Player(experiment, name='learningRate=0.001', learningRate=0.001, useProbabilities=True)
-        # p02 = Player(experiment, name='learningRate=0.0001', learningRate=0.0001, useProbabilities=True)
-        # p03 = Player(experiment, name='learningRate=0.00001', learningRate=0.00001, useProbabilities=True)
-        # p04 = Player(experiment, name='learningRate=0.01;preselect', learningRate=0.01, useProbabilities=True, preselectBatch=True)
-        # p05 = Player(experiment, name='learningRate=0.001;preselect', learningRate=0.001, useProbabilities=True, preselectBatch=True)
-        # p06 = Player(experiment, name='learningRate=0.0001;preselect', learningRate=0.0001, useProbabilities=True, preselectBatch=True)
-        # p07 = Player(experiment, name='learningRate=0.00001;preselect', learningRate=0.00001, useProbabilities=True, preselectBatch=True)
-        # p08 = Player(experiment, name='learningRate=0.00001;preselect;10epochs', learningRate=0.00001, useProbabilities=True, preselectBatch=True)
-        p09 = Player(experiment, name='learningRate=0.00001;10epochs', learningRate=0.00001, useProbabilities=True)
+        # p00 = Player(experiment, name='learning_rate=0.01', learning_rate=0.01, use_probabilities=True)
+        # p01 = Player(experiment, name='learning_rate=0.001', learning_rate=0.001, use_probabilities=True)
+        # p02 = Player(experiment, name='learning_rate=0.0001', learning_rate=0.0001, use_probabilities=True)
+        # p03 = Player(experiment, name='learning_rate=0.00001', learning_rate=0.00001, use_probabilities=True)
+        # p04 = Player(experiment, name='learning_rate=0.01;preselect', learning_rate=0.01, use_probabilities=True, preselect_batch=True)
+        # p05 = Player(experiment, name='learning_rate=0.001;preselect', learning_rate=0.001, use_probabilities=True, preselect_batch=True)
+        # p06 = Player(experiment, name='learning_rate=0.0001;preselect', learning_rate=0.0001, use_probabilities=True, preselect_batch=True)
+        # p07 = Player(experiment, name='learning_rate=0.00001;preselect', learning_rate=0.00001, use_probabilities=True, preselect_batch=True)
+        # p08 = Player(experiment, name='learning_rate=0.00001;preselect;10epochs', learning_rate=0.00001, use_probabilities=True, preselect_batch=True)
+        p09 = Player(experiment, name='learning_rate=0.00001;10epochs', learning_rate=0.00001, use_probabilities=True)
 
         self._players = [p09]#[p00, p01, p02, p03, p04, p05, p06, p07]
 
@@ -68,7 +68,7 @@ class Experiment():
         for p in self._players:
             # The amount of checkpoints say something about the progress of training
             training_done += [len(
-                [f for f in os.listdir(os.path.join(os.getcwd(), self._experiment, 'checkpoints', p._name, 'part1')) if
+                [f for f in os.listdir(os.path.join(os.getcwd(), self._experiment, 'checkpoints', p.name, 'part1')) if
                  '-next-state' not in f]) >= self._total_n_training]
 
             # The existence of competition results say something about the progress of competition
@@ -96,7 +96,7 @@ class Experiment():
                     arn = pickle.load(open(p._state_path, "rb", -1))
                     p.step = arn.step
                     p._eps = arn._eps
-                    p._cnt = arn.cnt
+                    p.cnt = arn.cnt
                     p.reload()
                     mdrtr = Moderator([p, p], experiment=self._experiment)
                     arn.modertr = mdrtr

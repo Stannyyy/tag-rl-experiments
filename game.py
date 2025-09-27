@@ -27,10 +27,10 @@ class Game(Config):
         Config.__init__(self)
 
         # Game variables
-        self._x_list = [-1] * self.numPlayers
-        self._y_list = [-1] * self.numPlayers
-        self._taggers = [True] * self.numTaggers + [False] * (self.numPlayers - self.numTaggers)
-        self._options = [0, 1, 2, 3,  # 0:up, 1:down, 2:left, 3:right,
+        self._x_list = [-1] * self.num_players
+        self._y_list = [-1] * self.num_players
+        self._taggers = [True] * self.num_taggers + [False] * (self.num_players - self.num_taggers)
+        self.options =  [0, 1, 2, 3,  # 0:up, 1:down, 2:left, 3:right,
                          4, 5, 6, 7,  # 4:up left, 5:up right, 6:down left, 7:down right
                          8]           # 8:dont move
         self._ended = 0
@@ -40,8 +40,8 @@ class Game(Config):
         self.init_random_game()
 
         # Initialize render
-        self._rendered = ''
-        self._prev_rendered = ''
+        self.rendered = ''
+        self._prevrendered = ''
 
         # Initialize save
         self.savePath = os.path.join(os.getcwd(), experiment, 'results')
@@ -51,14 +51,14 @@ class Game(Config):
         Start randomized game
         """
 
-        self._x_list = [-1] * self.numPlayers
-        self._y_list = [-1] * self.numPlayers
+        self._x_list = [-1] * self.num_players
+        self._y_list = [-1] * self.num_players
 
         occupied = set()
-        for i in range(self.numPlayers):
+        for i in range(self.num_players):
             while True:
-                x = int(np.floor(random.random() * self.gridSize))
-                y = int(np.floor(random.random() * self.gridSize))
+                x = int(np.floor(random.random() * self.grid_size))
+                y = int(np.floor(random.random() * self.grid_size))
                 if (x, y) not in occupied:
                     self._x_list[i] = x
                     self._y_list[i] = y
@@ -81,12 +81,12 @@ class Game(Config):
         y = self._y_list[turn]
 
         # For different scenario's, rule out options
-        options = copy.deepcopy(self._options)
+        options = copy.deepcopy(self.options)
         if y == 0:
             options[0] = -1
             options[4] = -1
             options[5] = -1
-        if y == self.gridSize - 1:
+        if y == self.grid_size - 1:
             options[1] = -1
             options[6] = -1
             options[7] = -1
@@ -94,7 +94,7 @@ class Game(Config):
             options[2] = -1
             options[4] = -1
             options[6] = -1
-        if x == self.gridSize - 1:
+        if x == self.grid_size - 1:
             options[3] = -1
             options[5] = -1
             options[7] = -1
@@ -114,12 +114,12 @@ class Game(Config):
         y = self._y_list[turn]
 
         # For different scenario's, rule out options
-        options = np.ones(np.shape(self._options), dtype=bool)
+        options = np.ones(np.shape(self.options), dtype=bool)
         if y == 0:
             options[0] = False
             options[4] = False
             options[5] = False
-        if y == self.gridSize - 1:
+        if y == self.grid_size - 1:
             options[1] = False
             options[6] = False
             options[7] = False
@@ -127,7 +127,7 @@ class Game(Config):
             options[2] = False
             options[4] = False
             options[6] = False
-        if x == self.gridSize - 1:
+        if x == self.grid_size - 1:
             options[3] = False
             options[5] = False
             options[7] = False
@@ -187,20 +187,20 @@ class Game(Config):
         y = self._y_list[turn]
 
         # Check if player is in the same spot as another player
-        in_same_spot = [i for i in range(self.numPlayers) if
+        in_same_spot = [i for i in range(self.num_players) if
                         (self._x_list[i] == x) and (self._y_list[i] == y) and (i != turn)]
 
         # A tagger gets some punishment for each move, a runner gets some reward for each move
         if is_tagger:
-            reward = -1 * self.stepPoints
+            reward = -1 * self.step_points
         else:
-            reward = self.stepPoints
+            reward = self.step_points
 
         # Each player gets some punishment for moving
         if choice in [0, 1, 2, 3]:              # 0:up, 1:down, 2:left, 3:right,
-            reward -= self.stepPoints * 0.25
+            reward -= self.step_points * 0.25
         elif choice in [4, 5, 6, 7]:            # 4:up left, 5:up right, 6:down left, 7:down right
-            reward -= ((self.stepPoints * 0.25) ** 2 * 2) ** 0.5
+            reward -= ((self.step_points * 0.25) ** 2 * 2) ** 0.5
         if choice == 8:                         # 8:dont move
             reward -= 0
 
@@ -210,9 +210,9 @@ class Game(Config):
             caught_is_tagger = self._taggers[caught]
             if is_tagger != caught_is_tagger:
                 if is_tagger:
-                    reward += self.tagPoints
+                    reward += self.tag_points
                 else:
-                    reward -= self.tagPoints
+                    reward -= self.tag_points
                 self._ended += 1
                 self._tag_happened = True
 
@@ -225,7 +225,7 @@ class Game(Config):
         """
 
         # Initialize field
-        playing_field = np.full(shape=(self.gridSize, self.gridSize), fill_value='     ')
+        playing_field = np.full(shape=(self.grid_size, self.grid_size), fill_value='     ')
         taggers = np.where(self._taggers)[0].tolist()
         runners = np.where([t == False for t in self._taggers])[0].tolist()
         if prediction is not None:
@@ -245,7 +245,7 @@ class Game(Config):
                 if tagger == state[4]:
                     for i, c in enumerate(print_prediction):
                         x, y = self.change_position(i, x_tagger, y_tagger)
-                        if (0 <= x < self.gridSize) and (0 <= y < self.gridSize):
+                        if (0 <= x < self.grid_size) and (0 <= y < self.grid_size):
                             playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(size)
 
         for runner in runners:
@@ -260,14 +260,14 @@ class Game(Config):
                 if runner == state[4]:
                     for i, c in enumerate(print_prediction):
                         x, y = self.change_position(i, x_runner, y_runner)
-                        if (0 <= x < self.gridSize) and (0 <= y < self.gridSize):
+                        if (0 <= x < self.grid_size) and (0 <= y < self.grid_size):
                             playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(size)
 
-        self._rendered = playing_field.T
+        self.rendered = playing_field.T
 
         # Display the rendered field:
         if display:
-            print(self._rendered)
+            print(self.rendered)
 
     def extract_position(self, grid, symbol):
 
@@ -503,19 +503,19 @@ class Game(Config):
         """
 
         # Get player (prev) positions
-        x_players = self.extract_position(self._rendered, 'x') + self.extract_position(self._rendered, '%')
-        o_players = self.extract_position(self._rendered, 'o') + self.extract_position(self._rendered, '%')
+        x_players = self.extract_position(self.rendered, 'x') + self.extract_position(self.rendered, '%')
+        o_players = self.extract_position(self.rendered, 'o') + self.extract_position(self.rendered, '%')
 
-        if str(self._prev_rendered) == '':
-            self._prev_rendered = self._rendered
+        if str(self._prevrendered) == '':
+            self._prevrendered = self.rendered
 
-        x_prev_players = self.extract_position(self._prev_rendered, 'x') + self.extract_position(self._prev_rendered, '%')
-        o_prev_players = self.extract_position(self._prev_rendered, 'o') + self.extract_position(self._prev_rendered, '%')
+        x_prev_players = self.extract_position(self._prevrendered, 'x') + self.extract_position(self._prevrendered, '%')
+        o_prev_players = self.extract_position(self._prevrendered, 'o') + self.extract_position(self._prevrendered, '%')
 
         # Set cell size and create an empty image
         cell_size = 200
-        grid_width = len(self._rendered)
-        grid_height = len(self._rendered)
+        grid_width = len(self.rendered)
+        grid_height = len(self.rendered)
         image_width = grid_width * cell_size
         image_height = grid_height * cell_size
         image = Image.new("RGB", (image_width, image_height), "white")
@@ -547,9 +547,9 @@ class Game(Config):
         image.save(os.path.join(self.savePath, prefix + ".png"))
 
         # Save current state as previous
-        self._prev_rendered = self._rendered
+        self._prevrendered = self.rendered
 
-    def record(self, game_name):
+    def record(self, gamename):
 
         """
         Record a gif from all saved image snapshots of each step in the game
@@ -565,7 +565,7 @@ class Game(Config):
             # duration in ms per frame; adjust as needed instead of duplicating frames
             duration = 100
             imgs[0].save(
-                os.path.join(self.savePath, game_name + '.gif'),
+                os.path.join(self.savePath, gamename + '.gif'),
                 save_all=True,
                 optimize=False,
                 append_images=imgs[1:],

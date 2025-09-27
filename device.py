@@ -35,7 +35,7 @@ if gpus:
 if gpus:
     for gpu in gpus:
         try:
-            memory_growth = tf.config.experimental.get_memory_growth(gpu)
+            memory_growth = tf.config.experimental.ge.memory_growth(gpu)
             print(f"Memory growth for {gpu}: {memory_growth}")
         except Exception as e:
             print(f"Error fetching memory growth setting: {e}")

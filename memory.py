@@ -6,7 +6,7 @@ import numpy as np
 # Memory
 class Memory(Config):
 
-    def __init__(self, maxMemory):
+    def __init__(self, max_memory):
 
         # Import config
         Config.__init__(self)
@@ -16,7 +16,7 @@ class Memory(Config):
         self._samples = []
         self._sample_buffer = []
         self._samples_count = 0
-        self.maxMemory = maxMemory
+        self.max_memory = max_memory
 
 
     def get_sample(self):
@@ -83,8 +83,8 @@ class Memory(Config):
         self.correct_sample_buffer()
 
         # If the amount of samples exceeds memory, truncate
-        if len(self._samples) > self.maxMemory:
-            self._samples = self._samples[-self.maxMemory:]
+        if len(self._samples) > self.max_memory:
+            self._samples = self._samples[-self.max_memory:]
 
     def add_sample(self):
         self._samples_count += 1

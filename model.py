@@ -25,34 +25,34 @@ def find_device():
         raise Exception("No devices found by tensorflow")
     
     # Else, use the first device (GPU preferred)
-    device_name = devices[0]
-    return tf.device(device_name)
+    devicename = devices[0]
+    return tf.device(devicename)
 
 # Model game
 class Model(Config):
 
-    def __init__(self, experiment="defaultname", model=None, learningRate=0.0001, layers=[50, 50],
-                 addLSTM=False, sequenceLengthLSTM=1, numStatesOverwrite=None, numActionsOverwrite=None):
+    def __init__(self, experiment="defaultname", model=None, learning_rate=0.0001, layers=[50, 50],
+                 add_lstm=False, sequence_length_lstm=1, numax_memorys_overwrite=None, num_actions_overwrite=None):
 
         # Import config
         Config.__init__(self)
-        if numStatesOverwrite is not None:
-            self.numStates = numStatesOverwrite
-        if numActionsOverwrite is not None:
-            self.numActions = numActionsOverwrite
+        if numax_memorys_overwrite is not None:
+            self.numax_memorys = numax_memorys_overwrite
+        if num_actions_overwrite is not None:
+            self.num_actions = num_actions_overwrite
 
         # Experiment name
         self._experiment = experiment
 
         # Define model
-        self._learning_rate = learningRate
+        self._learning_rate = learning_rate
         self._layers = layers
         self._model = model if model is not None else None
-        self._add_LSTM = addLSTM
-        self._sequence_length_LSTM = sequenceLengthLSTM
+        self._add_LSTM = add_lstm
+        self._sequence_length_LSTM = sequence_length_lstm
 
         # Define the placeholders
-        self._states = None
+        selfmax_memorys = None
         self._actions = None
 
         # Define the output operations
@@ -78,7 +78,7 @@ class Model(Config):
             layers = []
             for layer_nr, layer in enumerate(self._layers):
                 if self._add_LSTM and (layer_nr == 0):
-                    # LSTM as the first layer when addLSTM is enabled
+                    # LSTM as the first layer when add_lstm is enabled
                     layers += [tf.keras.layers.LSTM(units=layer)]
                 else:
                     # Dense layers with number of units defined by self._layers
@@ -87,7 +87,7 @@ class Model(Config):
                                tf.keras.layers.PReLU()]
 
             # Finalize with an output layer to predict the Q values for all the different actions
-            layers += [tf.keras.layers.Dense(self.numActions, activation='linear')]
+            layers += [tf.keras.layers.Dense(self.num_actions, activation='linear')]
 
             # Compile model
             model = tf.keras.models.Sequential(layers)
@@ -102,9 +102,9 @@ class Model(Config):
         Predict Q-values for a single state
         """
 
-        # If addLSTM is enabled, reshape the state into one that can be used by the LSTM layer of the model
+        # If add_lstm is enabled, reshape the state into one that can be used by the LSTM layer of the model
         if self._add_LSTM:
-            state = np.array(state).astype(float).reshape(1, self._sequence_length_LSTM, self.numStates)
+            state = np.array(state).astype(float).reshape(1, self._sequence_length_LSTM, self.num_states)
 
         # Predict Q values
         prediction = self._model.predict(state, verbose=0)
@@ -115,7 +115,7 @@ class Model(Config):
     def predict_batch(self, states):
         """
         Predict Q-values for a batch of states
-        Returns an array of shape (batch_size, numActions)
+        Returns an array of shape (batch_size, num_actions)
         """
 
         # A batch of one is just one
@@ -124,7 +124,7 @@ class Model(Config):
 
         # Prep for LSTM if necessary
         if self._add_LSTM:
-            states = states.astype(float).reshape((self.batchSize, self._sequence_length_LSTM, self.numStates))
+            states = states.astype(float).reshape((self.batch_size, self._sequence_length_LSTM, self.num_states))
 
         # Predict Q values
         predictions = self._model.predict(states, verbose=0)
@@ -173,7 +173,7 @@ class Model(Config):
 # When using a curiosity bonus, we need a model to predict the next state
 class ModelNextState(Config):
 
-    def __init__(self, experiment="defaultName", modelNextState=None, addLSTM=False, sequenceLengthLSTM=1):
+    def __init__(self, experiment="defaultName", modelNextState=None, add_lstm=False, sequence_length_lstm=1):
 
         # Import config
         Config.__init__(self)
@@ -185,8 +185,8 @@ class ModelNextState(Config):
         self._learning_rate_next_state = 0.001  # formerly alpha
         self._layers_next_state = [50,50]
         self._model_next_state = modelNextState if modelNextState is not None else None
-        self._add_LSTM = addLSTM
-        self._sequence_length_LSTM = sequenceLengthLSTM
+        self._add_LSTM = add_lstm
+        self._sequence_length_LSTM = sequence_length_lstm
 
         # Set up the models
         self.define_model_next_state()
@@ -205,7 +205,7 @@ class ModelNextState(Config):
             layers = []
             for layer_nr, layer in enumerate(self._layers_next_state):
                 if self._add_LSTM and (layer_nr == 0):
-                    # LSTM as the first layer when addLSTM is enabled
+                    # LSTM as the first layer when add_lstm is enabled
                     layers += [tf.keras.layers.LSTM(units=layer)]
                 else:
                     # Dense layers with number of units defined by self._layers
@@ -214,7 +214,7 @@ class ModelNextState(Config):
                                tf.keras.layers.PReLU()]
 
             # Finalize with an output layer to predict the next state values
-            layers += [tf.keras.layers.Dense(self.numStates, activation='linear')]
+            layers += [tf.keras.layers.Dense(self.num_states, activation='linear')]
 
             # Compile model
             model = tf.keras.models.Sequential(layers)
@@ -229,9 +229,9 @@ class ModelNextState(Config):
         Predict the next state for a single state
         """
 
-        # If addLSTM is enabled, reshape the state into one that can be used by the LSTM layer of the model
+        # If add_lstm is enabled, reshape the state into one that can be used by the LSTM layer of the model
         if self._add_LSTM:
-            state = np.array(state).reshape(1, self._sequence_length_LSTM, self.numStates)
+            state = np.array(state).reshape(1, self._sequence_length_LSTM, self.num_states)
 
         # Predict next state values
         prediction = self._model_next_state.predict(state, verbose=0)
@@ -242,7 +242,7 @@ class ModelNextState(Config):
     def predict_batch_next_state(self, states):
         """
         Predict next state values for a batch of states
-        Returns an array of shape (batch_size, numStates)
+        Returns an array of shape (batch_size, num_states)
         """
 
         # A batch of one is just one
@@ -251,7 +251,7 @@ class ModelNextState(Config):
 
         # Prep for LSTM if necessary
         if self._add_LSTM:
-            states = states.astype(float).reshape((self.batchSize, self._sequence_length_LSTM, self.numStates))
+            states = states.astype(float).reshape((self.batch_size, self._sequence_length_LSTM, self.num_states))
 
         # Predict next state values
         predictions = self._model_next_state.predict(states, verbose=0)
