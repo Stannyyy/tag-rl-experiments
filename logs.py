@@ -8,14 +8,14 @@ class TensorBoardLogs():
     def __init__(self, experimentName):
 
         # Arena variables
-        self._experiment = experimentName
+        self.experiment = experimentName
 
     def tensorboard_command(self):
-        print("tensorboard --logdir " + self._experiment + "/logs --port 6006")
+        print("tensorboard --logdir " + self.experiment + "/logs --port 6006")
 
     def start_tensorboard_live(self):
         tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', self._experiment+'/logs', '--port', '6006'])
+        tb.configure(argv=[None, '--logdir', self.experiment+'/logs', '--port', '6006'])
         url = tb.launch()
         print(f"TensorBoard is running at {url}")
 

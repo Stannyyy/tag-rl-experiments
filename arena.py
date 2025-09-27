@@ -7,16 +7,16 @@ import datetime
 
 # Arena
 class Arena(Config):
-    def __init__(self, modertr, training_phase="default"):
+    def __init__(self, training_phase="default", **kwargs):
 
         # Import config
-        Config.__init__(self)
+        super().__init__(**kwargs)
+        self.__dict__.update(kwargs)
         
         # Arena variables
         self.cnt = 1
         self.stt = time.time()
         self.loss_check = True
-        self.modertr = modertr
         self.training_phase = training_phase
         self.start_time = datetime.datetime.now()
         self.total_time = 0
@@ -29,27 +29,27 @@ class Arena(Config):
             if mode == 'sequential':
                 while (self.cnt % self.num_episodes_per_round != 1) | (new_round == True):
                     new_round = False
-                    for player in self.modertr.players:
+                    for player in self.moderator.players:
                         player.step = self.cnt
                         player.cnt = self.cnt
 
                     # Play episode!
-                    self.modertr.play_one(False)
-                    if len(self.modertr.players[0]._losses) > 0:
-                        self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.modertr.players[0]._losses[-1],2)))
+                    self.moderator.play_one(False)
+                    if len(self.moderator.players[0].losses) > 0:
+                        self.progress_bar(task='Playing episode: ' + str(self.cnt) + " with loss " + str(np.round(self.moderator.players[0].losses[-1],2)))
                     self.cnt += 1
 
                     # Stop the stopwatch
                     self.stop_stopwatch()
             elif mode == 'parallel':
-                self.modertr.play_many()
+                self.moderator.play_many()
                 self.stop_stopwatch()
                 self.cnt += self.num_episodes_per_round
 
             # Print progress
             print('\nRound', self.cnt-1, 'out of', self.num_episodes, self.total_time, 'sec elapsed')
 
-            unique_players = list(set(self.modertr.players))
+            unique_players = list(set(self.moderator.players))
             for player in unique_players:
                 if player.is_random:
                     # Print progress
@@ -72,14 +72,14 @@ class Arena(Config):
 
             # Show a couple of episodes
             for i in range(2):
-                self.modertr.play_one(self.create_video, learn=False)
+                self.moderator.play_one(self.create_video, learn=False)
 
             # Save models
             self.save_status()
 
 
     def save_status(self):
-        unique_players = list(set(self.modertr.players))
+        unique_players = list(set(self.moderator.players))
         for p in unique_players:
             if p.is_random == False:
 
@@ -95,7 +95,7 @@ class Arena(Config):
                 p._model_next_state = 0
                 p._summary_writer = ''
                 p._tboard_callback = ''
-                self.modertr = ''
+                self.moderator = ''
                 self.step = p.step
                 self.eps = p._eps
                 self.cnt = p.cnt
@@ -107,7 +107,7 @@ class Arena(Config):
     def competition(self):
 
         # Reload players
-        for p in self.modertr.players:
+        for p in self.moderator.players:
             p.reload()
 
         # Loop for number of episodes
@@ -115,9 +115,9 @@ class Arena(Config):
         while cnt < 10:
             cnt += 1
             print(f"Showing {cnt} out of {10} before starting large competition")
-            self.modertr.play_one(save_game=True, learn=False)
+            self.moderator.play_one(save_game=True, learn=False)
 
-        self.modertr.play_many(learn=False)
+        self.moderator.play_many(learn=False)
 
     def start_stopwatch(self):
         self.start_time = datetime.datetime.now()

@@ -253,7 +253,7 @@ class Player(Config, Model, ModelNextState, Memory):
     model_next_state = property(get_model_next_state)
 
     def get_losses(self):
-        return self._losses
+        return self.losses
 
     losses = property(get_losses)
 

@@ -22,8 +22,8 @@ class Moderator(Config):
         Config.__init__(self)
 
         # Moderator variables
-        self._experiment = experiment
-        self._players = players
+        self.experiment = experiment
+        self.players = players
         self._randomPlayers = [p.is_random for p in players]
         self._order_turns = random.sample(range(self.num_players), k=self.num_players)
         self._turn = self._order_turns[0]
@@ -34,14 +34,14 @@ class Moderator(Config):
         self._games = []
 
     def get_players(self):
-        return self._players
+        return self.players
     players = property(get_players)
 
     def shuffle_players(self):
-        random.shuffle(self._players)
+        random.shuffle(self.players)
 
     def alternate_players(self):
-        self._players.reverse()
+        self.players.reverse()
 
     def next_turn(self):
         idx = self._order_turns.index(self._turn)
@@ -57,7 +57,7 @@ class Moderator(Config):
         self._game.init_random_game()
 
         # Reset players
-        [p.new_game() for p in self._players]
+        [p.new_game() for p in self.players]
 
         # Render
         if save_game:
@@ -70,7 +70,7 @@ class Moderator(Config):
 
             # Determine next state
             self.next_turn()
-            player = self._players[self._turn]
+            player = self.players[self._turn]
             player.options = self._game.what_options(self._turn)
 
             # Set new player state
@@ -120,11 +120,11 @@ class Moderator(Config):
 
         # Create video
         if save_game:
-            gamename = ' is playing against '.join([p.name for p in self._players]) + ' on ' + datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+            gamename = ' is playing against '.join([p.name for p in self.players]) + ' on ' + datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
             self._game.record(gamename)
 
         # Update players
-        unique_players = list(set(self._players))
+        unique_players = list(set(self.players))
         for player in unique_players:
 
             if learn:
@@ -138,7 +138,7 @@ class Moderator(Config):
                 player.memory.add_corrected_sample(self._game._tag_happened)
 
                 # Learn!
-                player.learn_by_replay(int(self.batch_size * (len(self._players)/len(unique_players))))
+                player.learn_by_replay(int(self.batch_size * (len(self.players)/len(unique_players))))
 
             # Add rewards to reward store
             player.update_reward_store()
@@ -160,7 +160,7 @@ class Moderator(Config):
     def play_many(self, learn=True):
 
         # Initialize games
-        self._games = [Game(experiment = self._experiment) for ep in range(self.num_episodes_per_round)]
+        self._games = [Game(experiment = self.experiment) for ep in range(self.num_episodes_per_round)]
         [self._games[ep].init_random_game() for ep in range(self.num_episodes_per_round)]
         self._turn_counts = [0 for ep in range(self.num_episodes_per_round)]
         game_overs = [False for ep in range(self.num_episodes_per_round)]
@@ -169,8 +169,8 @@ class Moderator(Config):
         self.shuffle_players()
 
         # Reset players
-        [p.new_game() for p in self._players]
-        unique_players = list(set(self._players))
+        [p.new_game() for p in self.players]
+        unique_players = list(set(self.players))
         for p in unique_players:
             p.memory_many = [Memory(self.max_memory) for ep in range(self.num_episodes_per_round)]
 
@@ -180,7 +180,7 @@ class Moderator(Config):
             print(f"\rPlaying many games, step {i} out of {self.max_steps}", end='')
 
             # Determine next state
-            player = self._players[self._turn]
+            player = self.players[self._turn]
             player.options = np.array([[False, False, False, False, False, False, False, False, True] if game_overs[ep] else self._games[ep].what_options(self._turn) for ep in range(self.num_episodes_per_round)])
 
             # Set new player state
@@ -254,12 +254,12 @@ class Moderator(Config):
 
     def write_video_text(self):
         text = 'Is tagger info: ' + str([i for i, x in enumerate(self._game._taggers) if x][0]) + '\n' + \
-                'Reward player 0: ' + str(self._players[0]._reward) + '\n' + \
-                'Reward player 1: ' + str(self._players[1]._reward) + '\n' + \
-                'Total reward player 0 as tagger: ' + str(self._players[0]._tot_reward_tagger) + '\n' + \
-               'Total reward player 0 as runner: ' + str(self._players[0]._tot_reward_runner) + '\n' + \
-               'Total reward player 1 as tagger: ' + str(self._players[1]._tot_reward_tagger) + '\n' + \
-               'Total reward player 1 as runner: ' + str(self._players[1]._tot_reward_runner) + '\n' + \
+                'Reward player 0: ' + str(self.players[0]._reward) + '\n' + \
+                'Reward player 1: ' + str(self.players[1]._reward) + '\n' + \
+                'Total reward player 0 as tagger: ' + str(self.players[0]._tot_reward_tagger) + '\n' + \
+               'Total reward player 0 as runner: ' + str(self.players[0]._tot_reward_runner) + '\n' + \
+               'Total reward player 1 as tagger: ' + str(self.players[1]._tot_reward_tagger) + '\n' + \
+               'Total reward player 1 as runner: ' + str(self.players[1]._tot_reward_runner) + '\n' + \
                'Turns: ' + str(self._turn_count)
         return text
 

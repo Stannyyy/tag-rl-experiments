@@ -25,47 +25,22 @@ def find_device():
         raise Exception("No devices found by tensorflow")
     
     # Else, use the first device (GPU preferred)
-    devicename = devices[0]
-    return tf.device(devicename)
+    return tf.device(devices[0])
 
 # Model game
 class Model(Config):
 
-    def __init__(self, experiment="defaultname", model=None, learning_rate=0.0001, layers=[50, 50],
-                 add_lstm=False, sequence_length_lstm=1, numax_memorys_overwrite=None, num_actions_overwrite=None):
+    def __init__(self, model, **kwargs):
 
         # Import config
-        Config.__init__(self)
-        if numax_memorys_overwrite is not None:
-            self.numax_memorys = numax_memorys_overwrite
-        if num_actions_overwrite is not None:
-            self.num_actions = num_actions_overwrite
-
-        # Experiment name
-        self._experiment = experiment
+        super().__init__(**kwargs)
+        self.__dict__.update(kwargs)
 
         # Define model
-        self._learning_rate = learning_rate
-        self._layers = layers
-        self._model = model if model is not None else None
-        self._add_LSTM = add_lstm
-        self._sequence_length_LSTM = sequence_length_lstm
-
-        # Define the placeholders
-        selfmax_memorys = None
-        self._actions = None
-
-        # Define the output operations
-        self._logits = None
-        self._loss = None
-        self._optimizer = None
-        self._var_init = None
+        self.model = model if model is not None else None
 
         # Initialize the loss history
-        self._losses = []
-
-        # Initialize the checkpoint callback
-        self.cp_callback = None
+        self.losses = []
 
         # Set up the models
         self.define_model()
@@ -76,12 +51,12 @@ class Model(Config):
         """
         with find_device():
             layers = []
-            for layer_nr, layer in enumerate(self._layers):
-                if self._add_LSTM and (layer_nr == 0):
+            for layer_nr, layer in enumerate(self.layers):
+                if self.add_lstm and (layer_nr == 0):
                     # LSTM as the first layer when add_lstm is enabled
                     layers += [tf.keras.layers.LSTM(units=layer)]
                 else:
-                    # Dense layers with number of units defined by self._layers
+                    # Dense layers with number of units defined by self.layers
                     # PReLU is leaky relu of which alpha is learned
                     layers += [tf.keras.layers.Dense(layer),
                                tf.keras.layers.PReLU()]
@@ -93,9 +68,9 @@ class Model(Config):
             model = tf.keras.models.Sequential(layers)
             model.compile(
                 loss='mse',
-                optimizer=tf.optimizers.Adam(learning_rate=self._learning_rate)
+                optimizer=tf.optimizers.Adam(learning_rate=self.learning_rate)
             )
-            self._model = model
+            self.model = model
 
     def predict_one(self, state):
         """
@@ -103,11 +78,11 @@ class Model(Config):
         """
 
         # If add_lstm is enabled, reshape the state into one that can be used by the LSTM layer of the model
-        if self._add_LSTM:
-            state = np.array(state).astype(float).reshape(1, self._sequence_length_LSTM, self.num_states)
+        if self.add_lstm:
+            state = np.array(state).astype(float).reshape(1, self.sequence_length_lstm, self.num_states)
 
         # Predict Q values
-        prediction = self._model.predict(state, verbose=0)
+        prediction = self.model.predict(state, verbose=0)
 
         # Remove unnecessary dimensions
         return np.squeeze(prediction)
@@ -123,11 +98,11 @@ class Model(Config):
             return self.predict_one(states[0])
 
         # Prep for LSTM if necessary
-        if self._add_LSTM:
-            states = states.astype(float).reshape((self.batch_size, self._sequence_length_LSTM, self.num_states))
+        if self.add_lstm:
+            states = states.astype(float).reshape((self.batch_size, self.sequence_length_lstm, self.num_states))
 
         # Predict Q values
-        predictions = self._model.predict(states, verbose=0)
+        predictions = self.model.predict(states, verbose=0)
 
         return np.squeeze(predictions)
 
@@ -140,11 +115,11 @@ class Model(Config):
         # Train batch
         # tf.profiler.experimental.start(log_dir)
         callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
-        log = self._model.fit(x_batch, y_batch, epochs=epochs, verbose=verbose, callbacks=[callback])
+        log = self.model.fit(x_batch, y_batch, epochs=epochs, verbose=verbose, callbacks=[callback])
         # tf.profiler.experimental.stop()
 
         # Add losses to log
-        self._losses += log.history.get('loss')
+        self.losses += log.history.get('loss')
 
         # Add losses to tensorboard
         return {
@@ -159,8 +134,8 @@ class Model(Config):
         """
 
         # Save weights
-        checkpoint_path = os.path.join(os.getcwd(), self._experiment, 'checkpoints', name, training_phase)
-        self._model.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}.weights.h5'))
+        checkpoint_path = os.path.join(os.getcwd(), self.experiment, 'checkpoints', name, training_phase)
+        self.model.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}.weights.h5'))
 
     def load_checkpoint(self, path):
         """
@@ -168,7 +143,7 @@ class Model(Config):
         """
 
         # Load weights
-        self._model.load_weights(path)
+        self.model.load_weights(path)
 
 # When using a curiosity bonus, we need a model to predict the next state
 class ModelNextState(Config):
@@ -179,20 +154,20 @@ class ModelNextState(Config):
         Config.__init__(self)
 
         # Experiment name
-        self._experiment = experiment
+        self.experiment = experiment
 
         # Define model
-        self._learning_rate_next_state = 0.001  # formerly alpha
-        self._layers_next_state = [50,50]
-        self._model_next_state = modelNextState if modelNextState is not None else None
-        self._add_LSTM = add_lstm
-        self._sequence_length_LSTM = sequence_length_lstm
+        self.learning_rate_next_state = 0.001  # formerly alpha
+        self.layers_next_state = [50,50]
+        self.model_next_state = modelNextState if modelNextState is not None else None
+        self.add_lstm = add_lstm
+        self.sequence_length_lstm = sequence_length_lstm
 
         # Set up the models
         self.define_model_next_state()
 
         # Initialize the loss history
-        self._losses_next_state = []
+        self.losses_next_state = []
 
     def define_model_next_state(self):
 
@@ -203,12 +178,12 @@ class ModelNextState(Config):
         # If gpu available, take gpu, if not just take what is available
         with find_device():
             layers = []
-            for layer_nr, layer in enumerate(self._layers_next_state):
-                if self._add_LSTM and (layer_nr == 0):
+            for layer_nr, layer in enumerate(self.layers_next_state):
+                if self.add_lstm and (layer_nr == 0):
                     # LSTM as the first layer when add_lstm is enabled
                     layers += [tf.keras.layers.LSTM(units=layer)]
                 else:
-                    # Dense layers with number of units defined by self._layers
+                    # Dense layers with number of units defined by self.layers
                     # PReLU is leaky relu of which alpha is learned
                     layers += [tf.keras.layers.Dense(layer),
                                tf.keras.layers.PReLU()]
@@ -220,9 +195,9 @@ class ModelNextState(Config):
             model = tf.keras.models.Sequential(layers)
             model.compile(
                 loss='mse',
-                optimizer=tf.optimizers.Adam(learning_rate=self._learning_rate_next_state)
+                optimizer=tf.optimizers.Adam(learning_rate=self.learning_rate_next_state)
             )
-            self._model_next_state = model
+            self.model_next_state = model
 
     def predict_one_next_state(self, state):
         """
@@ -230,11 +205,11 @@ class ModelNextState(Config):
         """
 
         # If add_lstm is enabled, reshape the state into one that can be used by the LSTM layer of the model
-        if self._add_LSTM:
-            state = np.array(state).reshape(1, self._sequence_length_LSTM, self.num_states)
+        if self.add_lstm:
+            state = np.array(state).reshape(1, self.sequence_length_lstm, self.num_states)
 
         # Predict next state values
-        prediction = self._model_next_state.predict(state, verbose=0)
+        prediction = self.model_next_state.predict(state, verbose=0)
 
         # Remove unnecessary dimensions
         return np.squeeze(prediction)
@@ -250,11 +225,11 @@ class ModelNextState(Config):
             return self.predict_one_next_state(states[0])
 
         # Prep for LSTM if necessary
-        if self._add_LSTM:
-            states = states.astype(float).reshape((self.batch_size, self._sequence_length_LSTM, self.num_states))
+        if self.add_lstm:
+            states = states.astype(float).reshape((self.batch_size, self.sequence_length_lstm, self.num_states))
 
         # Predict next state values
-        predictions = self._model_next_state.predict(states, verbose=0)
+        predictions = self.model_next_state.predict(states, verbose=0)
 
         return np.squeeze(predictions)
 
@@ -265,10 +240,10 @@ class ModelNextState(Config):
         """
 
         # Train batch
-        log = self._model_next_state.fit(x_batch, y_batch, epochs=1, verbose=0)
+        log = self.model_next_state.fit(x_batch, y_batch, epochs=1, verbose=0)
 
         # Add losses to log
-        self._losses_next_state += log.history.get('loss')
+        self.losses_next_state += log.history.get('loss')
 
         # Add losses to tensorboard
         return {
@@ -283,8 +258,8 @@ class ModelNextState(Config):
         """
 
         # Save weights
-        checkpoint_path = os.path.join(os.getcwd(), self._experiment, 'checkpoints', name, training_phase)
-        self._model_next_state.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}-next-state.weights.h5'))
+        checkpoint_path = os.path.join(os.getcwd(), self.experiment, 'checkpoints', name, training_phase)
+        self.model_next_state.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}-next-state.weights.h5'))
 
     def load_checkpoint_next_state(self, path):
         """
@@ -292,4 +267,4 @@ class ModelNextState(Config):
         """
 
         # Load weights
-        self._model_next_state.load_weights(path)
+        self.model_next_state.load_weights(path)
