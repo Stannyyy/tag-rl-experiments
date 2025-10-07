@@ -1,46 +1,36 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Oct 21 20:13:26 2021
-
-@author: StannyGoffin
-"""
-import os
-
 # Import packages
 import tensorflow as tf
 import numpy as np
-from config import Config
 
 # Find device
 def find_device():
 
-    # If gpu available, take gpu, if not just take what is available
+    # If gpu available, take gpu. If not, just take what is available
     devices = tf.config.list_physical_devices()
     devices = ([device.name.replace('physical_device:', '') for device in devices if
                 'gpu' in device.device_type.lower()] +
                [device.name.replace('physical_device:', '') for device in devices])
-    
-    # If no devices, raise error
+
+    # If no devices, raise an error
     if len(devices) == 0:
         raise Exception("No devices found by tensorflow")
-    
+
     # Else, use the first device (GPU preferred)
     return tf.device(devices[0])
 
 # Model game
-class Model(Config):
+class Model:
 
-    def __init__(self, model, **kwargs):
-
-        # Import config
-        super().__init__(**kwargs)
-        self.__dict__.update(kwargs)
+    def __init__(self, config, model=None):
 
         # Define model
-        self.model = model if model is not None else None
+        self._model = model if model is not None else None
+
+        # Initialize config
+        self._config = config
 
         # Initialize the loss history
-        self.losses = []
+        self._losses = []
 
         # Set up the models
         self.define_model()
@@ -51,38 +41,42 @@ class Model(Config):
         """
         with find_device():
             layers = []
-            for layer_nr, layer in enumerate(self.layers):
-                if self.add_lstm and (layer_nr == 0):
+            for layer_nr, layer in enumerate(self._config.layers):
+                if self._config.add_lstm and (layer_nr == 0):
                     # LSTM as the first layer when add_lstm is enabled
                     layers += [tf.keras.layers.LSTM(units=layer)]
                 else:
-                    # Dense layers with number of units defined by self.layers
-                    # PReLU is leaky relu of which alpha is learned
+                    # Dense layers where the number of units is defined by self.layers
+                    # PReLU is a leaky relu of which alpha is learned
                     layers += [tf.keras.layers.Dense(layer),
                                tf.keras.layers.PReLU()]
 
             # Finalize with an output layer to predict the Q values for all the different actions
-            layers += [tf.keras.layers.Dense(self.num_actions, activation='linear')]
+            layers += [tf.keras.layers.Dense(self._config.action_size, activation='linear')]
 
             # Compile model
             model = tf.keras.models.Sequential(layers)
             model.compile(
                 loss='mse',
-                optimizer=tf.optimizers.Adam(learning_rate=self.learning_rate)
+                optimizer=tf.optimizers.Adam(learning_rate=self._config.learning_rate)
             )
-            self.model = model
+            self._model = model
 
     def predict_one(self, state):
         """
         Predict Q-values for a single state
         """
 
+        # If state is empty, return empty
+        if len(state[0]) == 0:
+            return np.array([])
+
         # If add_lstm is enabled, reshape the state into one that can be used by the LSTM layer of the model
-        if self.add_lstm:
-            state = np.array(state).astype(float).reshape(1, self.sequence_length_lstm, self.num_states)
+        if self._config.add_lstm:
+            state = np.array(state).astype(float).reshape(1, self._config.sequence_length_lstm, self._config.state_size)
 
         # Predict Q values
-        prediction = self.model.predict(state, verbose=0)
+        prediction = self._model.predict(np.array(state), verbose=0)
 
         # Remove unnecessary dimensions
         return np.squeeze(prediction)
@@ -90,23 +84,27 @@ class Model(Config):
     def predict_batch(self, states):
         """
         Predict Q-values for a batch of states
-        Returns an array of shape (batch_size, num_actions)
+        Returns an array of shape (batch_size, action_size)
         """
+
+        # To numpy array
+        states = np.array(states)
 
         # A batch of one is just one
         if len(states) == 1:
             return self.predict_one(states[0])
 
         # Prep for LSTM if necessary
-        if self.add_lstm:
-            states = states.astype(float).reshape((self.batch_size, self.sequence_length_lstm, self.num_states))
+        if self._config.add_lstm:
+            states = states.astype(float).reshape(
+                (self._config.batch_size, self._config.sequence_length_lstm, self._config.state_size))
 
         # Predict Q values
-        predictions = self.model.predict(states, verbose=0)
+        predictions = self._model.predict(states, verbose=0)
 
         return np.squeeze(predictions)
 
-    def train_batch(self, x_batch, y_batch, cnt, log_dir, epochs=1, verbose=False):
+    def train_batch(self, x_batch, y_batch, log_dir, epochs=1, verbose=False):
         """
         Train one batch and log the training loss
         Returns a summary dict for the tensorboard
@@ -114,28 +112,20 @@ class Model(Config):
 
         # Train batch
         # tf.profiler.experimental.start(log_dir)
-        callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
-        log = self.model.fit(x_batch, y_batch, epochs=epochs, verbose=verbose, callbacks=[callback])
+        callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=10)
+        log = self._model.fit(x_batch, y_batch, epochs=epochs, verbose=verbose, callbacks=[callback])
         # tf.profiler.experimental.stop()
 
         # Add losses to log
-        self.losses += log.history.get('loss')
+        self._losses += log.history.get('loss')
 
-        # Add losses to tensorboard
-        return {
-            "name": 'params/losses',
-            "value": np.round(log.history.get('loss'),5)[0],
-            "step": cnt
-        }
-
-    def save_checkpoint(self, cnt, name, training_phase):
+    def save_checkpoint(self, checkpoint_path_version):
         """
         Save model weights
         """
 
         # Save weights
-        checkpoint_path = os.path.join(os.getcwd(), self.experiment, 'checkpoints', name, training_phase)
-        self.model.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}.weights.h5'))
+        self._model.save_weights(checkpoint_path_version + '.weights.h5')
 
     def load_checkpoint(self, path):
         """
@@ -143,31 +133,35 @@ class Model(Config):
         """
 
         # Load weights
-        self.model.load_weights(path)
+        self._model.load_weights(path)
+
+    @property
+    def losses(self):
+        return self._losses
+
+    @property
+    def model(self):
+        return self._model
+
 
 # When using a curiosity bonus, we need a model to predict the next state
-class ModelNextState(Config):
+class ModelNextState:
 
-    def __init__(self, experiment="defaultName", modelNextState=None, add_lstm=False, sequence_length_lstm=1):
+    def __init__(self, config, modelNextState=None):
 
-        # Import config
-        Config.__init__(self)
-
-        # Experiment name
-        self.experiment = experiment
+        # Initialize config
+        self._config = config
 
         # Define model
-        self.learning_rate_next_state = 0.001  # formerly alpha
-        self.layers_next_state = [50,50]
-        self.model_next_state = modelNextState if modelNextState is not None else None
-        self.add_lstm = add_lstm
-        self.sequence_length_lstm = sequence_length_lstm
+        self._learning_rate_next_state = 0.001  # formerly alpha
+        self._layers_next_state = [50,50]
+        self._model_next_state = modelNextState if modelNextState is not None else None
+
+        # Initialize the loss history
+        self._losses_next_state = []
 
         # Set up the models
         self.define_model_next_state()
-
-        # Initialize the loss history
-        self.losses_next_state = []
 
     def define_model_next_state(self):
 
@@ -178,26 +172,26 @@ class ModelNextState(Config):
         # If gpu available, take gpu, if not just take what is available
         with find_device():
             layers = []
-            for layer_nr, layer in enumerate(self.layers_next_state):
-                if self.add_lstm and (layer_nr == 0):
+            for layer_nr, layer in enumerate(self._layers_next_state):
+                if self._config.add_lstm and (layer_nr == 0):
                     # LSTM as the first layer when add_lstm is enabled
                     layers += [tf.keras.layers.LSTM(units=layer)]
                 else:
-                    # Dense layers with number of units defined by self.layers
+                    # Dense layers where the number of units is defined by self.layers
                     # PReLU is leaky relu of which alpha is learned
                     layers += [tf.keras.layers.Dense(layer),
                                tf.keras.layers.PReLU()]
 
             # Finalize with an output layer to predict the next state values
-            layers += [tf.keras.layers.Dense(self.num_states, activation='linear')]
+            layers += [tf.keras.layers.Dense(self._config.state_size, activation='linear')]
 
             # Compile model
             model = tf.keras.models.Sequential(layers)
             model.compile(
                 loss='mse',
-                optimizer=tf.optimizers.Adam(learning_rate=self.learning_rate_next_state)
+                optimizer=tf.optimizers.Adam(learning_rate=self._learning_rate_next_state)
             )
-            self.model_next_state = model
+            self._model_next_state = model
 
     def predict_one_next_state(self, state):
         """
@@ -205,11 +199,11 @@ class ModelNextState(Config):
         """
 
         # If add_lstm is enabled, reshape the state into one that can be used by the LSTM layer of the model
-        if self.add_lstm:
-            state = np.array(state).reshape(1, self.sequence_length_lstm, self.num_states)
+        if self._config.add_lstm:
+            state = np.array(state).reshape(1, self._config.sequence_length_lstm, self._config.state_size)
 
         # Predict next state values
-        prediction = self.model_next_state.predict(state, verbose=0)
+        prediction = self._model_next_state.predict(np.array(state), verbose=0)
 
         # Remove unnecessary dimensions
         return np.squeeze(prediction)
@@ -217,49 +211,45 @@ class ModelNextState(Config):
     def predict_batch_next_state(self, states):
         """
         Predict next state values for a batch of states
-        Returns an array of shape (batch_size, num_states)
+        Returns an array of shape (batch_size, state_size)
         """
+
+        # To numpy array
+        states = np.array(states)
 
         # A batch of one is just one
         if len(states) == 1:
             return self.predict_one_next_state(states[0])
 
         # Prep for LSTM if necessary
-        if self.add_lstm:
-            states = states.astype(float).reshape((self.batch_size, self.sequence_length_lstm, self.num_states))
+        if self._config.add_lstm:
+            states = states.astype(float).reshape(
+                (self._config.batch_size, self._config.sequence_length_lstm, self._config.state_size))
 
         # Predict next state values
-        predictions = self.model_next_state.predict(states, verbose=0)
+        predictions = self._model_next_state.predict(states, verbose=0)
 
         return np.squeeze(predictions)
 
-    def train_batch_next_state(self, x_batch, y_batch, cnt):
+    def train_batch_next_state(self, x_batch, y_batch):
         """
         Train one batch and log the training loss
         Returns a summary dict for the tensorboard
         """
 
         # Train batch
-        log = self.model_next_state.fit(x_batch, y_batch, epochs=1, verbose=0)
+        log = self._model_next_state.fit(x_batch, y_batch, epochs=1, verbose=0)
 
         # Add losses to log
-        self.losses_next_state += log.history.get('loss')
+        self._losses_next_state += log.history.get('loss')
 
-        # Add losses to tensorboard
-        return {
-                "name": 'params/losses-next-state',
-                "value": np.round(log.history.get('loss'),5)[0],
-                "step": cnt
-             }
-
-    def save_checkpoint_next_state(self, cnt, name, training_phase):
+    def save_checkpoint_next_state(self, checkpoint_path_version):
         """
         Save model weights
         """
 
         # Save weights
-        checkpoint_path = os.path.join(os.getcwd(), self.experiment, 'checkpoints', name, training_phase)
-        self.model_next_state.save_weights(os.path.join(checkpoint_path, f'cp-{cnt:06d}-next-state.weights.h5'))
+        self._model_next_state.save_weights(checkpoint_path_version + '-next-state.weights.h5')
 
     def load_checkpoint_next_state(self, path):
         """
@@ -267,4 +257,12 @@ class ModelNextState(Config):
         """
 
         # Load weights
-        self.model_next_state.load_weights(path)
+        self._model_next_state.load_weights(path)
+
+    @property
+    def losses_next_state(self):
+        return self._losses_next_state
+
+    @property
+    def model_next_state(self):
+        return self._model_next_state

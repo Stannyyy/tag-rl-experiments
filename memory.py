@@ -1,128 +1,98 @@
 # Import packages
 import copy
-from config import Config
-import numpy as np
 
 # Memory
-class Memory(Config):
+class Memory:
 
-    def __init__(self, max_memory):
+    def __init__(self, config):
 
-        # Import config
-        Config.__init__(self)
+        self._experience = []
+        self._experiences = []
+        self._experience_buffer = []
+        self._config = config
 
-        self._sample = []
-        self._sample_many = []
-        self._samples = []
-        self._sample_buffer = []
-        self._samples_count = 0
-        self.max_memory = max_memory
-
-
-    def get_sample(self):
-        return self._sample
-
-    sample = property(get_sample)
-
-    def set_sample(self, values):
-        choice, reward, state = values
-        self._sample = [state, int(choice), reward]
-
-    sample = property(get_sample, set_sample)
-
-    def get_samples(self):
-        return self._samples
-
-    samples = property(get_samples)
-
-    def set_samples(self, samples):
-        self._samples = samples
-
-    samples = property(get_samples, set_samples)
-
-    def update_sample(self, options, state):
+    def update_experience(self, options, state):
 
         """
-        Update remaining sample with next state and options for next state
+        Update remaining experience with next state and options for next state
         """
 
         if state is None:
-            self._sample += [None, [False, False, False, False, False, False, False, False, True]]
-        if len(self._sample) == 3:
-            self._sample += [state, [bool(o) for o in options]]
+            self._experience += [None, [False, False, False, False, False, False, False, False, True]]
+        if len(self._experience) == 3:
+            self._experience += [state, [bool(o) for o in options]]
 
-    def add_corrected_sample(self, tag_happened):
+    def add_corrected_experience(self, tag_happened):
 
         """
-        Add sample to sample history (and fix buffer if necessary)
-        The sample buffer is there in case the player is playing against itself. Then the next state is not the next
-        sample, but the one where it is in the same role again.
+        Add experience to experience history (and fix buffer if necessary)
+        The experience buffer is there in case the player is playing against itself. Then the next state is not the next
+        experience, but the one where it is in the same role again.
         """
 
-        # If the sample is empty, you're done
-        if len(self._sample) == 0:
+        # If the experience is empty, you're done
+        if len(self._experience) == 0:
             return None
 
-        # If no tag happened, check if sample needs correction (if yes add to sample buffer)
+        # If no tag happened, check if experience needs correction (if yes add to experience buffer)
         if tag_happened:
-            if self._sample[3] is not None:
-                self._sample[3:5] = (None, [False, False, False, False, False, False, False, False, True])
-            self._sample_buffer += [copy.deepcopy(self._sample)]
-            self.add_sample()
+            if self._experience[3] is not None:
+                self._experience[3:5] = (None, [False, False, False, False, False, False, False, False, True])
+            self._experience_buffer += [copy.deepcopy(self._experience)]
+            self.add_experience()
         else:
             # If role of current and next state are different
             # due to player playing against itself: buffer to correct
-            if self._sample[0][-2] is not self._sample[3][-2]:
-                self._sample_buffer += [copy.deepcopy(self._sample)]
-                self._sample = []
+            if self._experience[0][-2] is not self._experience[3][-2]:
+                self._experience_buffer += [copy.deepcopy(self._experience)]
+                self._experience = []
             else:
-                self.add_sample()
+                self.add_experience()
 
-        # For the sample buffer, find the subsequent samples with matching roles
-        # The state and next state should have the same role for one sample
-        self.correct_sample_buffer()
+        # For the experience buffer, find the subsequent experiences with matching roles
+        # The state and next state should have the same role for one experience
+        self.correct_experience_buffer()
 
-        # If the amount of samples exceeds memory, truncate
-        if len(self._samples) > self.max_memory:
-            self._samples = self._samples[-self.max_memory:]
+        # If the amount of experiences exceeds memory, truncate
+        if len(self._experiences) > self._config.memory_size:
+            self._experiences = self._experiences[-self._config.memory_size:]
 
-    def add_sample(self):
-        self._samples_count += 1
-        self._samples += [self._sample]
-        self._sample = []
+    def add_experience(self):
+        self._experiences += [self._experience]
+        self._experience = []
 
-    def correct_sample_buffer(self):
+    def correct_experience_buffer(self):
 
         """
-        Take the first sample in the buffer, then find the matching sample to correct the first.
-        The sample buffer is there in case the player is playing against itself. Then the next state is not the next
-        sample, but the one where it is in the same role again.
+        Take the first experience in the buffer, then find the matching experience to correct the first.
+        The experience buffer is there in case the player is playing against itself. Then the next state is not the next
+        experience, but the one where it is in the same role again.
         """
 
-        # Take the first sample
+        # Take the first experience
         i = 0; del_is = []
 
-        while len(self._sample_buffer) > (i + 1):
-            sample_to_correct = copy.deepcopy(self._sample_buffer[i])
-            turn = sample_to_correct[0][-2]
+        while len(self._experience_buffer) > (i + 1):
+            experience_to_correct = copy.deepcopy(self._experience_buffer[i])
+            turn = experience_to_correct[0][-2]
             match_found = False
-            for j, _sample in enumerate(self._sample_buffer[(i+1):], start=i+1):
+            for j, _experience in enumerate(self._experience_buffer[(i+1):], start=i+1):
 
-                # Find matching sample (same role)
-                if _sample[3] is None and _sample[0][-2] == turn:
-                    sample_to_correct[-2] = _sample[0]
-                    sample_to_correct[-1] = _sample[-1]
+                # Find matching experience (same role)
+                if _experience[3] is None and _experience[0][-2] == turn:
+                    experience_to_correct[-2] = _experience[0]
+                    experience_to_correct[-1] = _experience[-1]
                     match_found = True
 
-                elif len(_sample) is 5 and _sample[3] is not None and _sample[3][-2] == turn:
+                elif len(_experience) == 5 and _experience[3] is not None and _experience[3][-2] == turn:
 
-                    # Take this found sample to correct the next state and next options of the sample to correct
-                    sample_to_correct[-2:] = _sample[-2:]
+                    # Take this found experience to correct the next state and next options of the experience to correct
+                    experience_to_correct[-2:] = _experience[-2:]
                     match_found = True
 
                 if match_found:
-                    self._sample = sample_to_correct
-                    self.add_sample()
+                    self._experience = experience_to_correct
+                    self.add_experience()
 
                     # Once corrected, it can be deleted from the buffer
                     if i not in del_is:
@@ -130,8 +100,31 @@ class Memory(Config):
                     break
 
             # Delete from buffer
-            self._sample_buffer = [s for d, s in enumerate(self._sample_buffer) if d not in del_is]
+            self._experience_buffer = [s for d, s in enumerate(self._experience_buffer) if d not in del_is]
             i+=1; i-=len(del_is); del_is = []
 
-        # Clean up finished samples
-        self._sample_buffer = [s for s in self._sample_buffer if s[3] is not None]
+        # Clean up the finished experiences
+        self._experience_buffer = [s for s in self._experience_buffer if s[3] is not None]
+
+    @property
+    def experience(self):
+        return self._experience
+
+    @experience.setter
+    def experience(self, values):
+        if len(values) == 3:
+            choice, reward, state = values
+            self._experience = [state, int(choice), reward]
+        elif len(values) == 5:
+            self._experience = values
+        else:
+            raise ValueError(
+                "The experience setter expects either:"
+                " - a tuple of three values: (choice, reward, state); or"
+                " - a list of all five experience values: [state, choice, reward, next_state, next_options]"
+            )
+
+
+    @property
+    def experiences(self):
+        return self._experiences

@@ -3,23 +3,24 @@ import os
 from tensorboard import program
 
 # Define Tensorboard class
-class TensorBoardLogs():
+class TensorBoardLogs:
 
-    def __init__(self, experimentName):
+    def __init__(self, experiment_name):
 
         # Arena variables
-        self.experiment = experimentName
+        self._experiment_name = experiment_name
 
     def tensorboard_command(self):
-        print("tensorboard --logdir " + self.experiment + "/logs --port 6006")
+        print("tensorboard --logdir " + self._experiment_name + "/logs --port 6006")
 
     def start_tensorboard_live(self):
         tb = program.TensorBoard()
-        tb.configure(argv=[None, '--logdir', self.experiment+'/logs', '--port', '6006'])
+        tb.configure(argv=[None, '--logdir', self._experiment_name+'/logs', '--port', '6006'])
         url = tb.launch()
         print(f"TensorBoard is running at {url}")
 
-    def show_all_tensorboards(self):
+    @staticmethod
+    def show_all_tensorboards():
         folder = os.listdir(os.getcwd())
         experiments = [f for f in folder if "experiment-" in f]
         port = 6007

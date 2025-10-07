@@ -1,16 +1,7 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Oct 21 20:11:00 2021
-
-@author: StannyGoffin
-"""
-
 # Import packages
 import random
 import numpy as np
-from config import Config
 from PIL import Image, ImageDraw, ImageFont
-import copy
 import glob
 import os
 
@@ -19,46 +10,47 @@ def mold_to_size(value, size):
     return str(value).strip().replace(" ", "")[:size].ljust(size)
 
 # Game
-class Game(Config):
+class Game:
 
-    def __init__(self, experiment="defaultname"):
-
-        # Import config
-        Config.__init__(self)
+    def __init__(self, config, display_path="defaultname"):
 
         # Game variables
-        self._x_list = [-1] * self.num_players
-        self._y_list = [-1] * self.num_players
-        self._taggers = [True] * self.num_taggers + [False] * (self.num_players - self.num_taggers)
-        self.options =  [0, 1, 2, 3,  # 0:up, 1:down, 2:left, 3:right,
+        self._x_list = [-1] * config.number_of_players
+        self._y_list = [-1] * config.number_of_players
+        self._taggers = ([True] * config.number_of_taggers +
+                         [False] * (config.number_of_players - config.number_of_taggers))
+        self._options = [0, 1, 2, 3,  # 0:up, 1:down, 2:left, 3:right,
                          4, 5, 6, 7,  # 4:up left, 5:up right, 6:down left, 7:down right
                          8]           # 8:dont move
         self._ended = 0
         self._tag_happened = False
 
+        # Initialize render
+        self._rendered = ''
+        self._previously_rendered = ''
+
+        # Initialize the save path for displaying games
+        self._display_path = display_path
+
+        # Initialize config
+        self._config = config
+
         # Initialize game
         self.init_random_game()
 
-        # Initialize render
-        self.rendered = ''
-        self._prevrendered = ''
-
-        # Initialize save
-        self.savePath = os.path.join(os.getcwd(), experiment, 'results')
-
     def init_random_game(self):
         """
-        Start randomized game
+        Start a randomized game
         """
 
-        self._x_list = [-1] * self.num_players
-        self._y_list = [-1] * self.num_players
+        self._x_list = [-1] * self._config.number_of_players
+        self._y_list = [-1] * self._config.number_of_players
 
         occupied = set()
-        for i in range(self.num_players):
+        for i in range(self._config.number_of_players):
             while True:
-                x = int(np.floor(random.random() * self.grid_size))
-                y = int(np.floor(random.random() * self.grid_size))
+                x = int(np.floor(random.random() * self._config.grid_size))
+                y = int(np.floor(random.random() * self._config.grid_size))
                 if (x, y) not in occupied:
                     self._x_list[i] = x
                     self._y_list[i] = y
@@ -69,38 +61,6 @@ class Game(Config):
             self._taggers = [not t for t in self._taggers]
         self._ended = 0
         self._tag_happened = False
-
-    def what_options_bu(self, turn):
-
-        """
-        Check what move options the player has
-        """
-
-        # Get x and y position of the player whose turn it is
-        x = self._x_list[turn]
-        y = self._y_list[turn]
-
-        # For different scenario's, rule out options
-        options = copy.deepcopy(self.options)
-        if y == 0:
-            options[0] = -1
-            options[4] = -1
-            options[5] = -1
-        if y == self.grid_size - 1:
-            options[1] = -1
-            options[6] = -1
-            options[7] = -1
-        if x == 0:
-            options[2] = -1
-            options[4] = -1
-            options[6] = -1
-        if x == self.grid_size - 1:
-            options[3] = -1
-            options[5] = -1
-            options[7] = -1
-
-        options = [o for o in options if o != -1]
-        return options
 
     # Move options
     def what_options(self, turn):
@@ -114,12 +74,12 @@ class Game(Config):
         y = self._y_list[turn]
 
         # For different scenario's, rule out options
-        options = np.ones(np.shape(self.options), dtype=bool)
+        options = np.ones(np.shape(self._options), dtype=bool)
         if y == 0:
             options[0] = False
             options[4] = False
             options[5] = False
-        if y == self.grid_size - 1:
+        if y == self._config.grid_size - 1:
             options[1] = False
             options[6] = False
             options[7] = False
@@ -127,14 +87,15 @@ class Game(Config):
             options[2] = False
             options[4] = False
             options[6] = False
-        if x == self.grid_size - 1:
+        if x == self._config.grid_size - 1:
             options[3] = False
             options[5] = False
             options[7] = False
 
         return options
 
-    def change_position(self, choice, x, y):
+    @staticmethod
+    def change_position(choice, x, y):
 
         """
         Change the position of a player on the board
@@ -187,20 +148,20 @@ class Game(Config):
         y = self._y_list[turn]
 
         # Check if player is in the same spot as another player
-        in_same_spot = [i for i in range(self.num_players) if
+        in_same_spot = [i for i in range(self._config.number_of_players) if
                         (self._x_list[i] == x) and (self._y_list[i] == y) and (i != turn)]
 
         # A tagger gets some punishment for each move, a runner gets some reward for each move
         if is_tagger:
-            reward = -1 * self.step_points
+            reward = -1 * self._config.step_points
         else:
-            reward = self.step_points
+            reward = self._config.step_points
 
         # Each player gets some punishment for moving
         if choice in [0, 1, 2, 3]:              # 0:up, 1:down, 2:left, 3:right,
-            reward -= self.step_points * 0.25
+            reward -= self._config.step_points * 0.25
         elif choice in [4, 5, 6, 7]:            # 4:up left, 5:up right, 6:down left, 7:down right
-            reward -= ((self.step_points * 0.25) ** 2 * 2) ** 0.5
+            reward -= ((self._config.step_points * 0.25) ** 2 * 2) ** 0.5
         if choice == 8:                         # 8:dont move
             reward -= 0
 
@@ -210,9 +171,9 @@ class Game(Config):
             caught_is_tagger = self._taggers[caught]
             if is_tagger != caught_is_tagger:
                 if is_tagger:
-                    reward += self.tag_points
+                    reward += self._config.tag_points
                 else:
-                    reward -= self.tag_points
+                    reward -= self._config.tag_points
                 self._ended += 1
                 self._tag_happened = True
 
@@ -225,7 +186,7 @@ class Game(Config):
         """
 
         # Initialize field
-        playing_field = np.full(shape=(self.grid_size, self.grid_size), fill_value='     ')
+        playing_field = np.full(shape=(self._config.grid_size, self._config.grid_size), fill_value='     ')
         taggers = np.where(self._taggers)[0].tolist()
         runners = np.where([t == False for t in self._taggers])[0].tolist()
         if prediction is not None:
@@ -239,13 +200,14 @@ class Game(Config):
         for tagger in taggers:
             x_tagger = self._x_list[tagger]
             y_tagger = self._y_list[tagger]
-            playing_field[x_tagger, y_tagger] = ('x    ' + playing_field[x_tagger, y_tagger]).strip().replace(" ", "").ljust(size)
+            playing_field[x_tagger, y_tagger] = (f"x    {playing_field[x_tagger, y_tagger]}"
+                                                 ).strip().replace(" ", "").ljust(size)
 
             if (prediction is not None) and (state is not None):
                 if tagger == state[4]:
                     for i, c in enumerate(print_prediction):
                         x, y = self.change_position(i, x_tagger, y_tagger)
-                        if (0 <= x < self.grid_size) and (0 <= y < self.grid_size):
+                        if (0 <= x < self._config.grid_size) and (0 <= y < self._config.grid_size):
                             playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(size)
 
         for runner in runners:
@@ -260,16 +222,17 @@ class Game(Config):
                 if runner == state[4]:
                     for i, c in enumerate(print_prediction):
                         x, y = self.change_position(i, x_runner, y_runner)
-                        if (0 <= x < self.grid_size) and (0 <= y < self.grid_size):
+                        if (0 <= x < self._config.grid_size) and (0 <= y < self._config.grid_size):
                             playing_field[x, y] = (playing_field[x, y] + c).strip().replace(" ", "").ljust(size)
 
-        self.rendered = playing_field.T
+        self._rendered = playing_field.T
 
         # Display the rendered field:
         if display:
-            print(self.rendered)
+            print(self._rendered)
 
-    def extract_position(self, grid, symbol):
+    @staticmethod
+    def extract_position(grid, symbol):
 
         """
         Extract player position
@@ -277,7 +240,8 @@ class Game(Config):
 
         return [[x,y] for x in range(len(grid)) for y in range(len(grid[x])) if symbol in str(grid[x][y])]
 
-    def draw_cat(self, draw, players, prev_players, color,
+    @staticmethod
+    def draw_cat(draw, players, previous_players, color,
                  cell_size, player_radius, ear_ratio=0.8):
         """
         Draw a simple cat to represent the tagger
@@ -299,7 +263,7 @@ class Game(Config):
         cheek_offset_x = max(2, int(face_rx * 0.55))  # where whiskers attach on cheeks
         cheek_y_offset = max(0, int(face_ry * 0.05))  # slight offset from vertical center
 
-        for (x, y), _ in zip(players, prev_players):
+        for (x, y), _ in zip(players, previous_players):
             # Draw only at the current position (no trail)
             center_x = x * cell_size + cell_size // 2
             center_y = y * cell_size + top_margin + cell_size // 2
@@ -377,7 +341,8 @@ class Game(Config):
 
         return draw
 
-    def draw_mouse(self, draw, players, prev_players, color,
+    @staticmethod
+    def draw_mouse(draw, players, previous_players, color,
                    cell_size, half_size, width=10):
         """
         Draw a simple mouse to represent the runner
@@ -396,9 +361,9 @@ class Game(Config):
         # Colors for details
         detail_color = "black"
 
-        for (x, y), (x_prev, y_prev) in zip(players, prev_players):
-            center_x = (x_prev + (x - x_prev)) * cell_size + cell_size // 2
-            center_y = ((y_prev + (y - y_prev)) * cell_size) + top_margin + cell_size // 2
+        for (x, y), (x_previous, y_previous) in zip(players, previous_players):
+            center_x = (x_previous + (x - x_previous)) * cell_size + cell_size // 2
+            center_y = ((y_previous + (y - y_previous)) * cell_size) + top_margin + cell_size // 2
 
             # Body (wide ellipse centered slightly behind the nose)
             body_left = center_x - body_len // 2
@@ -502,20 +467,20 @@ class Game(Config):
         Save image snapshot of each step in the game to later record them into a gif
         """
 
-        # Get player (prev) positions
-        x_players = self.extract_position(self.rendered, 'x') + self.extract_position(self.rendered, '%')
-        o_players = self.extract_position(self.rendered, 'o') + self.extract_position(self.rendered, '%')
+        # Get player (previous) positions
+        x_players = self.extract_position(self._rendered, 'x') + self.extract_position(self._rendered, '%')
+        o_players = self.extract_position(self._rendered, 'o') + self.extract_position(self._rendered, '%')
 
-        if str(self._prevrendered) == '':
-            self._prevrendered = self.rendered
+        if str(self._previously_rendered) == '':
+            self._previously_rendered = self._rendered
 
-        x_prev_players = self.extract_position(self._prevrendered, 'x') + self.extract_position(self._prevrendered, '%')
-        o_prev_players = self.extract_position(self._prevrendered, 'o') + self.extract_position(self._prevrendered, '%')
+        x_previous_players = self.extract_position(self._previously_rendered, 'x') + self.extract_position(self._previously_rendered, '%')
+        o_previous_players = self.extract_position(self._previously_rendered, 'o') + self.extract_position(self._previously_rendered, '%')
 
         # Set cell size and create an empty image
         cell_size = 200
-        grid_width = len(self.rendered)
-        grid_height = len(self.rendered)
+        grid_width = len(self._rendered)
+        grid_height = len(self._rendered)
         image_width = grid_width * cell_size
         image_height = grid_height * cell_size
         image = Image.new("RGB", (image_width, image_height), "white")
@@ -537,26 +502,26 @@ class Game(Config):
 
         # Draw players
         player_radius = 50
-        draw = self.draw_cat(draw, x_players, x_prev_players, "black",
+        draw = self.draw_cat(draw, x_players, x_previous_players, "black",
                                          cell_size, player_radius)
-        draw = self.draw_mouse(draw, o_players, o_prev_players, "grey",
+        draw = self.draw_mouse(draw, o_players, o_previous_players, "grey",
                                         cell_size, player_radius)
 
         # Save stationary image
         prefix = str(prefix).zfill(3)
-        image.save(os.path.join(self.savePath, prefix + ".png"))
+        image.save(os.path.join(self._display_path, f"{prefix}.png"))
 
         # Save current state as previous
-        self._prevrendered = self.rendered
+        self._previously_rendered = self._rendered
 
-    def record(self, gamename):
+    def record(self, game_path):
 
         """
         Record a gif from all saved image snapshots of each step in the game
         """
 
         try:
-            frame_files = sorted(glob.glob(os.path.join(self.savePath, '*.png')))
+            frame_files = sorted(glob.glob(os.path.join(self._display_path, "*.png")))
             if not frame_files:
                 print("No frames to record.")
                 return
@@ -565,7 +530,7 @@ class Game(Config):
             # duration in ms per frame; adjust as needed instead of duplicating frames
             duration = 100
             imgs[0].save(
-                os.path.join(self.savePath, gamename + '.gif'),
+                os.path.join(self._display_path, f"{game_path}.gif"),
                 save_all=True,
                 optimize=False,
                 append_images=imgs[1:],
@@ -579,10 +544,38 @@ class Game(Config):
             for im in locals().get('imgs', []):
                 try:
                     im.close()
-                except Exception:
+                except Exception():
                     pass
             try:
-                for filename in glob.glob(os.path.join(self.savePath, '*.png')):
+                for filename in glob.glob(os.path.join(self._display_path, "*.png")):
                     os.remove(filename)
             except Exception as e:
                 print(f"Failed to clean up frames: {e}")
+
+    @property
+    def x_list(self):
+        return self._x_list
+
+    @property
+    def y_list(self):
+        return self._y_list
+
+    @property
+    def taggers(self):
+        return self._taggers
+
+    @property
+    def ended(self):
+        return self._ended
+
+    @ended.setter
+    def ended(self, value):
+        self._ended = value
+
+    @property
+    def tag_happened(self):
+        return self._tag_happened
+
+    @property
+    def rendered(self):
+        return self._rendered

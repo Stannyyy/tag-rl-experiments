@@ -1,11 +1,14 @@
+import os
 import pytest
-from game import Game, mold_to_size
 import random
 import numpy as np
+from game import Game, mold_to_size
+from config import Config
 
 @pytest.fixture
 def game():
-    return Game(experiment='test')
+    config = Config()
+    return Game(config, os.path.join(os.getcwd(), 'tests-saved'))
 
 @pytest.fixture(autouse=True)
 def set_seed():
@@ -22,8 +25,8 @@ def test_mold_to_size():
 def test_init_random_game(game):
 
     # From seed, init two random games
-    if game.gridSize != 10:
-        raise Exception("Expected results for game.gridSize missing")
+    if game._config.grid_size != 10:
+        raise Exception("Expected results for game._config.grid_size missing")
 
     game.init_random_game()
     assert game._x_list == [1, 1]
@@ -43,9 +46,9 @@ def test_what_options(game):
 
     # For 4 corners, 4 edges and the middle, -alternating turn-, correct options
     min_i = 0
-    max_i = game.gridSize - 1
-    mid_i = int(game.gridSize/2)
-    if game.gridSize <= 2:
+    max_i = game._config.grid_size - 1
+    mid_i = int(game._config.grid_size/2)
+    if game._config.grid_size <= 2:
         raise Exception("Expected results for game.gridSize smaller than 3 is missing")
 
     # Note alternating turn
@@ -53,47 +56,47 @@ def test_what_options(game):
     # Corner 1 - top left - can go down, right and still
     game._x_list = [min_i, mid_i]
     game._y_list = [min_i, mid_i]
-    assert game.what_options(0) == [1, 3, 7, 8]
+    assert np.all(game.what_options(0) == np.array([False, True, False, True, False, False, False, True, True]))
 
     # Corner 2 - top right - can go down, left and still
     game._x_list = [mid_i, max_i]
     game._y_list = [mid_i, min_i]
-    assert game.what_options(1) == [1, 2, 6, 8]
+    assert np.all(game.what_options(1) == np.array([False, True, True, False, False, False, True, False, True]))
 
     # Corner 3 - bottom left - can go up, right and still
     game._x_list = [min_i, mid_i]
     game._y_list = [max_i, mid_i]
-    assert game.what_options(0) == [0, 3, 5, 8]
+    assert np.all(game.what_options(0) == np.array([True, False, False, True, False, True, False, False, True]))
 
     # Corner 4 - bottom right - can go up, left and still
     game._x_list = [mid_i, max_i]
     game._y_list = [mid_i, max_i]
-    assert game.what_options(1) == [0, 2, 4, 8]
+    assert np.all(game.what_options(1) == np.array([True, False, True, False, True, False, False, False, True]))
 
     # Edge 1 - left - can go up, down, right and still
     game._x_list = [mid_i, min_i]
     game._y_list = [mid_i, mid_i]
-    assert game.what_options(1) == [0, 1, 3, 5, 7, 8]
+    assert np.all(game.what_options(1) == np.array([True, True, False, True, False, True, False, True, True]))
 
     # Edge 2 - top - can go down, right, left and still
     game._x_list = [mid_i, mid_i]
     game._y_list = [min_i, mid_i]
-    assert game.what_options(0) == [1, 2, 3, 6, 7, 8]
+    assert np.all(game.what_options(0) == np.array([False, True, True, True, False, False, True, True, True]))
 
     # Edge 3 - right - can go up, down, left and still
     game._x_list = [mid_i, max_i]
     game._y_list = [mid_i, mid_i]
-    assert game.what_options(1) == [0, 1, 2, 4, 6, 8]
+    assert np.all(game.what_options(1) == np.array([True, True, True, False, True, False, True, False, True]))
 
     # Edge 4 - bottom - can go up, right, left and still
     game._x_list = [mid_i, mid_i]
     game._y_list = [max_i, mid_i]
-    assert game.what_options(0) == [0, 2, 3, 4, 5, 8]
+    assert np.all(game.what_options(0) == np.array([True, False, True, True, True, True, False, False, True]))
 
     # Middle - can go everywhere
     game._x_list = [mid_i, mid_i]
     game._y_list = [mid_i, mid_i]
-    assert game.what_options(0) == [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    assert np.all(game.what_options(0) == np.array([True, True, True, True, True, True, True, True, True]))
 
 def test_change_position(game):
     assert game.change_position(0, 1, 1) == (1, 0)
@@ -107,8 +110,8 @@ def test_change_position(game):
     assert game.change_position(8, 1, 1) == (1, 1)
 
 def test_move(game):
-    mid_i = int(game.gridSize/2)
-    if game.gridSize < 7:
+    mid_i = int(game._config.grid_size/2)
+    if game._config.grid_size < 7:
         raise Exception("Expected results for game.gridSize smaller than 7 is missing")
 
     game._x_list = [mid_i, mid_i]
@@ -142,10 +145,10 @@ def test_move(game):
     assert game._y_list == [mid_i-1, mid_i+1]
 
 def test_what_reward(game):
-    mid_i = int(game.gridSize/2)
+    mid_i = int(game._config.grid_size/2)
     min_i = 0
-    max_i = game.gridSize - 1
-    if (game.gridSize != 10) or (game.stepPoints != 1):
+    max_i = game._config.grid_size - 1
+    if (game._config.grid_size != 10) or (game._config.step_points != 1):
         raise Exception("Expected results for game.gridSize other than 10 is missing")
 
     game._x_list = [min_i, max_i]
@@ -194,9 +197,9 @@ def test_what_reward(game):
 
 def test_render(game):
     min_i = 0
-    max_i = game.gridSize - 1
-    mid_i = int(game.gridSize/2)
-    if game.gridSize <= 2:
+    max_i = game._config.grid_size - 1
+    mid_i = int(game._config.grid_size/2)
+    if game._config.grid_size <= 2:
         raise Exception("Expected results for game.gridSize smaller than 3 is missing")
 
     game._x_list = [mid_i, mid_i]
@@ -239,7 +242,7 @@ def test_render(game):
     assert game._rendered[max_i][min_i] == 'x    '
     assert game._rendered[max_i][mid_i] == 'o%   '
 
-    if game.numActions != 9:
+    if game._config.action_size != 9:
         raise Exception("Expected results only available for game.numActions of 9")
     game._x_list = [mid_i, mid_i]
     game._y_list = [mid_i, max_i]
