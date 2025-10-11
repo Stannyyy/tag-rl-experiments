@@ -65,8 +65,8 @@ class Player:
         self._current_options = []
 
         # Save intermittent folders
-        self._state_path = os.path.join(path, "state", f"part1-{self._name.replace(' ', '')}.pickle")
-        self._checkpoint_path = os.path.join(path, "checkpoints", self._name, "part1")
+        self._state_path = os.path.join(path, "state", f"{self._name.replace(' ', '')}.pickle")
+        self._checkpoint_path = os.path.join(path, "checkpoints", self._name)
         self._log_path = os.path.join(path, "logs", f"dql_{self._name}")
 
         # Set up the tensorboard
@@ -140,6 +140,8 @@ class Player:
         Choose action: random based on chance value epsilon OR based on current policy for the given state
         """
         options = np.array(options)
+        # if len(options.shape) == 1:
+        #     options = np.expand_dims(options, axis=0)
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
@@ -167,12 +169,14 @@ class Player:
 
         return option_counts, idx_options, starts
 
-    def choose_many_actions(self, options, selection):
+    def choose_many_actions(self, options, selection, competition_game=False):
 
         """
         Choose many action: random based on chance value epsilon OR based on current policy for the given state
         for all games in the batch in parallel
         """
+
+        options = np.array(options)
 
         # Check requirements
         if self._config.add_lstm:
@@ -180,7 +184,7 @@ class Player:
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
-        if chance_value < self._epsilon:
+        if (chance_value < self._epsilon) and (competition_game == False):
 
             # Dissect options
             option_counts, idx_options, starts = self.options_to_eligible_idx(options)
@@ -206,18 +210,18 @@ class Player:
             # Filter options
             predictions = predictions.astype(float, copy=False)
 
-        if self._config.use_probabilities:
+        if self._config.use_probabilities and (competition_game == False):
             probabilities = self.prediction_to_probabilities(predictions, options[selection])
             choices = np.array([np.random.choice(self._config.action_size, p=row) for row in probabilities])
 
         else:
-            predictions[~options] = -np.inf
-            choices = np.argmax(predictions)
+            predictions[~options[selection]] = -np.inf
+            choices = np.array([np.argmax(row) for row in predictions])
 
         all_choices = []
         for episode in range(self._config.number_of_episodes_per_round):
             if episode in selection:
-                all_choices.append(choices[selection.index(episode)])
+                all_choices.append(int(choices[selection.index(episode)]))
             else:
                 all_choices.append(8)
 
@@ -373,27 +377,7 @@ class Player:
                     "name": 'Q/tagged-state-of-alternative-action',
                     "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
                     "step": self._arena.episode_count
-                },
-                {
-                    "name": 'Q/difference-relative',
-                    "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._arena.episode_count
-                },
-                {
-                    "name": 'Q/difference-absolute',
-                    "value": np.round(np.mean(np.abs(q_crucial_action)) - np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._arena.episode_count
-                },
-                {
-                    "name": 'Q/tagged-state-of-crucial-action-norm',
-                    "value": np.round(np.mean(np.abs(q_crucial_action)) / np.mean(np.abs(q_s_a)), 1),
-                    "step": self._arena.episode_count
-                },
-                {
-                    "name": 'Q/tagged-state-of-alternative-action-norm',
-                    "value": np.round(np.mean(np.abs(q_alternative_action)) / np.mean(np.abs(q_s_a)), 1),
-                    "step": self._arena.episode_count
-                },
+                }
             ]
 
     def add_losses_to_tensorboard(self):
@@ -406,12 +390,74 @@ class Player:
         }]
 
         if self._config.curiosity:
-            loss_next_state = self._model_next_state.losses[-1]
+            loss_next_state = self._model_next_state.losses_next_state[-1]
             self._summary_writer_collection += [{
                 "name": 'learning/losses-next-state',
                 "value": loss_next_state,
                 "step": self._arena.episode_count
             }]
+
+    def add_epsilon_to_tensorboard(self):
+        # Add epsilon to tensorboard
+        self._summary_writer_collection += [
+            {
+                "name": 'episodes/epsilon',
+                "value": np.round(self._epsilon, 3),
+                "step": self._arena.episode_count
+            }
+        ]
+
+    def add_episode_times_to_tensorboard(self):
+        if len(self._arena.episode_times) > 0:
+            self._summary_writer_collection += [
+                {
+                    "name": 'episodes/times',
+                    "value": np.mean(self._arena.episode_times),
+                    "step": self._arena.episode_count
+                }
+            ]
+        self._arena.episode_times = []
+
+    def add_rewards_to_tensorboard(self, turn_count):
+        self._summary_writer_collection += [
+            {
+                "name": 'rewards/turn_count',
+                "value": turn_count,
+                "step": self._arena.episode_count
+            }
+        ]
+        if self._total_reward_tagger != 0:
+            self._summary_writer_collection += [
+                {
+                    "name": 'rewards/tagger',
+                    "value": float(self._total_reward_tagger),
+                    "step": self._arena.episode_count
+                }
+            ]
+        if self._total_reward_runner != 0:
+            self._summary_writer_collection += [
+                {
+                    "name": 'rewards/runner',
+                    "value": float(self._total_reward_runner),
+                    "step": self._arena.episode_count
+                }
+            ]
+
+    def add_competition_to_tensorboard(self, episode_count, competitor):
+        self._summary_writer_collection += [
+            {
+                "name": f'competition/{competitor}/tagger',
+                "value": float(self._total_reward_tagger),
+                "step": episode_count
+            }
+        ]
+        self._summary_writer_collection += [
+            {
+                "name": f'competition/{competitor}/runner',
+                "value": float(self._total_reward_runner),
+                "step": episode_count
+            }
+        ]
 
     def create_batch(self, batch_size=None):
 
@@ -473,12 +519,14 @@ class Player:
 
         prediction = [np.round(p, 1) for p in self.state_to_prediction()]
         game.render(prediction, self._state)
-        print('---')
-        print(self._state)
-        print('---')
+        to_print = '\n---'
+        to_print += f'\n{self._state}'
+        to_print += '\n---'
         for row in game.rendered:
-            print('|'.join(row))
-        print('---')
+            to_print += f"\n{'|'.join(row)}"
+        to_print += '\n---'
+        print(to_print)
+        return to_print
 
     def update_reward_store(self):
         if self._total_reward_tagger != 0:
@@ -493,57 +541,11 @@ class Player:
                      (self._config.maximum_epsilon - self._config.minimum_epsilon) *
                      math.exp(-self._config.bootstrap_value_epsilon * self._arena.episode_count))
 
-    def add_epsilon_to_tensorboard(self):
-        # Add epsilon to tensorboard
-        self._summary_writer_collection += [
-            {
-                "name": 'episodes/epsilon',
-                "value": np.round(self._epsilon, 3),
-                "step": self._arena.episode_count
-            }
-        ]
-
-    def add_episode_times_to_tensorboard(self):
-        if len(self._arena.episode_times) > 0:
-            self._summary_writer_collection += [
-                {
-                    "name": 'episodes/times',
-                    "value": np.mean(self._arena.episode_times),
-                    "step": self._arena.episode_count
-                }
-            ]
-        self._arena.episode_times = []
-
-    def add_rewards_to_tensorboard(self, turn_count):
-        self._summary_writer_collection += [
-            {
-                "name": 'rewards/turn_count',
-                "value": turn_count,
-                "step": self._arena.episode_count
-            }
-        ]
-        if self._total_reward_tagger != 0:
-            self._summary_writer_collection += [
-                {
-                    "name": 'rewards/tagger',
-                    "value": float(self._total_reward_tagger),
-                    "step": self._arena.episode_count
-                }
-            ]
-        if self._total_reward_runner != 0:
-            self._summary_writer_collection += [
-                {
-                    "name": 'rewards/runner',
-                    "value": float(self._total_reward_runner),
-                    "step": self._arena.episode_count
-                }
-            ]
-
     def new_game(self):
         self._total_reward_tagger = 0
         self._total_reward_runner = 0
 
-    def reload(self, arena):
+    def reload(self, arena, checkpoint_path_overwrite = None):
 
         self._arena = arena
 
@@ -557,26 +559,28 @@ class Player:
 
         self.update_epsilon()
 
-        checkpoints = [p for p in os.listdir(self._checkpoint_path) if
-                       '-next-state' not in p and p.endswith('.weights.h5')]
-        checkpoints.sort()
-        if checkpoints:
-            self._model.load_checkpoint(os.path.join(self._checkpoint_path, checkpoints[-1]))
+        if checkpoint_path_overwrite is not None:
+            self._model.load_checkpoint(checkpoint_path_overwrite)
+        else:
+            checkpoints = [p for p in os.listdir(self._checkpoint_path) if
+                           '-next-state' not in p and p.endswith('.keras')]
+            checkpoints.sort()
+            if checkpoints:
+                self._model.load_checkpoint(os.path.join(self._checkpoint_path, checkpoints[-1]))
 
         if self._config.curiosity:
-            self._model.define_model_next_state()
+            self._model_next_state.define_model_next_state()
             self._model_next_state.build(input_shape=input_shape)
-            checkpoints_next_state = [p for p in os.listdir(self._checkpoint_path) if
-                                      '-next-state' in p and p.endswith('.weights.h5')]
-            checkpoints_next_state.sort()
-            if checkpoints_next_state:
-                self._model.load_checkpoint_next_state(os.path.join(self._checkpoint_path, checkpoints_next_state[-1]))
+            if checkpoint_path_overwrite is not None:
+                self._model_next_state.load_checkpoint(checkpoint_path_overwrite.replace('.keras', '-next-state.keras'))
+            else:
+                checkpoints_next_state = [p for p in os.listdir(self._checkpoint_path) if
+                                          '-next-state' in p and p.endswith('.keras')]
+                checkpoints_next_state.sort()
+                if checkpoints_next_state:
+                    self._model_next_state.load_checkpoint_next_state(os.path.join(self._checkpoint_path, checkpoints_next_state[-1]))
         self._summary_writer = tf.summary.create_file_writer(self._log_path)
         # exec(self._tboard_callback_command)
-
-    def new_part(self, current_part, new_part):
-        self._state_path = self._state_path.replace(current_part, new_part)
-        self._checkpoint_path = self._checkpoint_path.replace(current_part, new_part)
 
     @property
     def is_random(self):

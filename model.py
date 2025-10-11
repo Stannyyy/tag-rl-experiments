@@ -1,5 +1,6 @@
 # Import packages
 import tensorflow as tf
+from tensorflow.keras import saving
 import numpy as np
 
 # Find device
@@ -125,7 +126,7 @@ class Model:
         """
 
         # Save weights
-        self._model.save_weights(checkpoint_path_version + '.weights.h5')
+        self._model.save(checkpoint_path_version + '.keras')
 
     def load_checkpoint(self, path):
         """
@@ -133,7 +134,10 @@ class Model:
         """
 
         # Load weights
-        self._model.load_weights(path)
+        if '.weights.h5' in path:
+            self._model.load_weights(path)
+        else:
+            self._model = saving.load_model(path, compile=True)
 
     @property
     def losses(self):
@@ -249,7 +253,7 @@ class ModelNextState:
         """
 
         # Save weights
-        self._model_next_state.save_weights(checkpoint_path_version + '-next-state.weights.h5')
+        self._model_next_state.save(checkpoint_path_version + '-next-state.keras')
 
     def load_checkpoint_next_state(self, path):
         """
@@ -257,7 +261,10 @@ class ModelNextState:
         """
 
         # Load weights
-        self._model_next_state.load_weights(path)
+        if '.weights.h5' in path:
+            self._model_next_state.load_weights(path)
+        else:
+            self._model_next_state = saving.load_model(path, compile=True)
 
     @property
     def losses_next_state(self):

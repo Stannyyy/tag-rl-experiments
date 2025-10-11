@@ -35,7 +35,7 @@ class Moderator:
             idx = 0
         self._turn = self._order_of_turns[idx]
 
-    def play_one(self, save_game = False, learn = True):
+    def play_one(self, save_game = False, learn = True, game_path = None):
         
         # Initialize game
         self._turn_count = 0
@@ -105,10 +105,11 @@ class Moderator:
 
         # Create video
         if save_game:
-            game_path = os.path.join(
-                *[player.name for player in self._players],
-                datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
-            )
+            if game_path is None:
+                game_path = os.path.join(
+                    *[player.name for player in self._players],
+                    datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+                )
             self._game.record(game_path)
 
         # Update players
@@ -146,7 +147,7 @@ class Moderator:
         else:
             self.alternate_players()
 
-    def play_many(self, learn=True):
+    def play_many(self, learn=True, competition_game=False):
 
         # Initialize games
         self._games = [Game(self._config, self._display_games_path) for episode in range(self._config.number_of_episodes_per_round)]
@@ -192,7 +193,7 @@ class Moderator:
             selection = [episode for episode in range(self._config.number_of_episodes_per_round) if not game_overs[episode]]
 
             # Make a move! Unless a tag has happened or the game has reached maximum turns
-            choices = player.choose_many_actions(player.current_options, selection)
+            choices = player.choose_many_actions(player.current_options, selection, competition_game=competition_game)
             choices = [8 if self._games[episode].ended > 0 else choices[episode] for episode in range(self._config.number_of_episodes_per_round)]
 
             # Set new experience
@@ -220,7 +221,6 @@ class Moderator:
             self.next_turn()
             self._turn_counts = [self._turn_counts[episode] if self._games[episode].ended else self._turn_counts[episode] + 1 for episode in range(self._config.number_of_episodes_per_round)]
 
-        print("\rPlaying over, now preparing to learn", end='')
         for player in unique_players:
 
             # Load all games into one memory
@@ -240,7 +240,8 @@ class Moderator:
 
             # Add rewards
             player.update_reward_store()
-            player.add_rewards_to_tensorboard(np.mean(self._turn_counts))
+            if competition_game == False:
+                player.add_rewards_to_tensorboard(np.mean(self._turn_counts))
 
             # Learn!
             if learn:

@@ -83,20 +83,18 @@ class Arena:
                 player.reload(self)
 
 
-    def competition(self):
-
-        # Reload players
-        for player in self._moderator.players:
-            player.reload(self)
+    def competition(self, game_path=None):
 
         # Loop for number of episodes
+        self.start_stopwatch()
         match_count = 0
-        while match_count < 10:
+        while match_count < 2:
             match_count += 1
-            print(f"\rShowing {match_count} out of {10} before starting large competition", end='')
-            self._moderator.play_one(save_game=True, learn=False)
+            print(f"\rShowing {match_count} out of {2} before starting large competition", end='')
+            self._moderator.play_one(save_game=True, learn=False, game_path=game_path)
 
-        self._moderator.play_many(learn=False)
+        self._moderator.play_many(learn=False, competition_game=True)
+        self.stop_stopwatch()
 
     def start_stopwatch(self):
         self._start_time = datetime.datetime.now()

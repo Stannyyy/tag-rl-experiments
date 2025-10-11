@@ -8,14 +8,17 @@ class Config:
         # Training regime
         self._maximum_epsilon=1
         self._minimum_epsilon=0.01
-        self._number_of_episodes_total=2500000
-        self._number_of_episodes_per_round=2500
-        self._bootstrap_value_epsilon=0.00001 # formerly lambda
+        self._number_of_episodes_total=2000000
+        self._number_of_episodes_per_round=10000
+        self._bootstrap_value_epsilon=0.0000025 # formerly lambda
         self._discount_factor=0.99 # formerly gamma
         self._preselect_batch=False
         self._use_probabilities=True
         self._game_play_mode='parallel'
         self._redo_batch=False
+
+        # Competition regime
+        self._number_of_competition_episodes = 100
 
         # Model variables
         self._learning_rate=0.00001
