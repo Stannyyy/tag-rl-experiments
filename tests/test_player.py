@@ -2,7 +2,7 @@ import pytest
 import os
 import random
 import numpy as np
-from player import Player
+from player import Player, RandomPlayer, StillPlayer
 from config import Config
 from arena import Arena
 from model import Model
@@ -16,7 +16,21 @@ def player():
     return player
 
 @pytest.fixture
-def player_curious():
+def random_player():
+    config = Config()
+    player = RandomPlayer(config=config, path='tests', name='test-random-player')
+    player.arena = Arena(config=config)
+    return player
+
+@pytest.fixture
+def still_player():
+    config = Config()
+    player = StillPlayer(config=config, path='tests', name='test-still-player')
+    player.arena = Arena(config=config)
+    return player
+
+@pytest.fixture
+def curious_player():
     config = Config()
     config.curiosity = True
     player = Player(config=config, path='tests', name='test-player-curious')
@@ -57,7 +71,7 @@ def test_player_config():
     assert player1.config.batch_size != player2.config.batch_size
     assert player1.config.game_play_mode != player2.config.game_play_mode
 
-def test_prediction_to_probabilities(player):
+def test_prediction_to_probabilities(player, random_player, still_player):
 
     # Cases unispaced
     def test_cases_unispaced(player, expected_probabilities):
@@ -116,6 +130,7 @@ def test_prediction_to_probabilities(player):
                                                        options=[True, True, True, True, True])
     assert np.allclose(probabilities, expected_probabilities, atol=0.00001)
 
+
 def test_state_to_prediction(custom_player):
     prediction = custom_player.state_to_prediction()
     assert prediction.shape == (0,)
@@ -131,7 +146,7 @@ def test_state_to_prediction(custom_player):
     prediction = custom_player.state_to_prediction()
     assert np.allclose(prediction, np.array([0.01279932, 0.02213031]), atol=0.00001)
 
-def test_choose_action(player):
+def test_choose_action(player, random_player, still_player):
     player._epsilon = 0.5
     player._state = [0, 1]
 
@@ -139,15 +154,15 @@ def test_choose_action(player):
         raise Exception("Expected results for game.numActions missing")
 
     assert player.choose_action(options=[True, False, True, False, True, False, False, False, False],
-                                save_game=False) == 4 # depends on the seed!
+                                save_game=False) == 2 # depends on the seed!
     assert player.choose_action(options=[True, True, False, False, False, False, False, False, True],
                                 save_game=False) == 1
     assert player.choose_action(options=[False, True, True, False, False, True, False, False, False],
-                                save_game=False) == 1
+                                save_game=False) == 5
     assert player.choose_action(options=[False, False, True, True, True, False, False, False, False],
-                                save_game=False) == 3
+                                save_game=False) == 4
     assert player.choose_action(options=[False, False, False, True, True, True, True, True, True],
-                                save_game=False) == 3
+                                save_game=False) == 8
     assert player.choose_action(options=[False, False, False, False, True, False, False, False, False],
                                 save_game=False) == 4
 
@@ -161,10 +176,38 @@ def test_choose_action(player):
     player._use_probabilities = True
     assert player.choose_action([False, False, False, True, True, True, True, True, True],
                                 save_game=True) == 8
-    assert player.choose_action([False, False, False, True, True, True, True, True, True],
-                                save_game=False) == 4
+    assert player.choose_action([False, False, False, True, True, True, True, True, False],
+                                save_game=False) == 3
 
-def test_choose_many_actions(player):
+    assert random_player.choose_action([True, True, True, True, True, True, True, True, True],
+                                       save_game=True) == 3
+    assert random_player.choose_action([True, True, True, True, True, True, True, True, True],
+                                       save_game=False) == 5
+
+    assert still_player.choose_action([True, True, True, True, True, True, True, True, True],
+                                       save_game=True) == 8
+    assert still_player.choose_action([True, True, True, True, True, True, True, True, True],
+                                       save_game=False) == 8
+
+def test_options_to_eligible_idx(player, random_player):
+    options = np.array([[True, False, True, False, True, False, False, False, False],
+                        [True, True, True, True, True, True, True, True, True],
+                        [False, False, False, False, False, False, False, False, False],
+                        [True, False, True, False, True, False, True, False, True],
+                        [False, True, False, True, False, True, False, True, False]]
+                       )
+    option_counts, idx_options, starts = player.options_to_eligible_idx(options)
+    assert np.all(option_counts == np.array([3, 9, 0, 5, 4]))
+    assert np.all(idx_options == np.array([0, 2, 4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 2, 4, 6, 8, 1, 3, 5, 7]))
+    assert np.all(starts == np.array([0, 3, 12, 12, 17]))
+
+    option_counts, idx_options, starts = random_player.options_to_eligible_idx(options)
+    assert np.all(option_counts == np.array([3, 9, 0, 5, 4]))
+    assert np.all(idx_options == np.array([0, 2, 4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 2, 4, 6, 8, 1, 3, 5, 7]))
+    assert np.all(starts == np.array([0, 3, 12, 12, 17]))
+
+
+def test_choose_many_actions(player, random_player, still_player):
     player._epsilon = 0.5
     player._state_many = [[0, 0],
                           [0, 1],
@@ -179,32 +222,46 @@ def test_choose_many_actions(player):
                [False, True, True, True, True, True, True, True, True],
                [False, False, True, True, True, True, True, True, True],
                [False, False, True, True, True, True, True, True, False]]
-    assert player.choose_many_actions(options=options,
-                                      selection=[0, 1, 2],
-                                      competition_game=False) == [4, 3, 3, 8]
+    assert np.all(player.choose_many_actions(options=options,
+                                             selection=[0, 1, 2],
+                                             competition_game=False) == [4, 6, 5, 8])
 
-    assert player.choose_many_actions(options=options,
-                                      selection=[0, 1, 2],
-                                      competition_game=True) == [0, 8, 7, 8]
+    assert np.all(player.choose_many_actions(options=options,
+                                             selection=[0, 1, 2],
+                                             competition_game=True) == [0, 8, 7, 8])
 
     player._config._use_probabilities = True
     choice = player.choose_many_actions(options=options,
                                selection=[0, 1, 2],
                                competition_game=False)
-    assert np.all(choice == np.array([4, 3, 3, 8]))
+    assert np.all(choice == np.array([4, 5, 4, 8]))
 
-def test_options_to_eligible_idx(player):
-    options = np.array([[True, False, True, False, True, False, False, False, False],
-                        [True, True, True, True, True, True, True, True, True],
-                        [False, False, False, False, False, False, False, False, False],
-                        [True, False, True, False, True, False, True, False, True],
-                        [False, True, False, True, False, True, False, True, False]]
-                       )
-    option_counts, idx_options, starts = player.options_to_eligible_idx(options)
-    assert np.all(option_counts == np.array([3, 9, 0, 5, 4]))
-    assert np.all(idx_options == np.array([0, 2, 4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 2, 4, 6, 8, 1, 3, 5, 7]))
-    assert np.all(starts == np.array([0, 3, 12, 12, 17]))
+    assert np.all(random_player.choose_many_actions(options=options,
+                                                    selection=[0, 1, 2],
+                                                    competition_game=False) == [4, 6, 5, 8])
 
+    assert np.all(still_player.choose_many_actions(options=options,
+                                                   selection=[0, 1, 2],
+                                                   competition_game=False) == [8, 8, 8, 8])
+
+def test_new_game(player, random_player, still_player):
+    player._total_reward_tagger = 1
+    player._total_reward_runner = 2
+    player.new_game()
+    assert player._total_reward_tagger == 0
+    assert player._total_reward_runner == 0
+
+    random_player._total_reward_tagger = 1
+    random_player._total_reward_runner = 2
+    random_player.new_game()
+    assert random_player._total_reward_tagger == 0
+    assert random_player._total_reward_runner == 0
+
+    still_player._total_reward_tagger = 1
+    still_player._total_reward_runner = 2
+    still_player.new_game()
+    assert still_player._total_reward_tagger == 0
+    assert still_player._total_reward_runner == 0
 
 @pytest.mark.skip(reason="ignored: visual testing enough")
 def test_write_summary_to_tensorboard():
@@ -291,17 +348,17 @@ def test_add_qs_to_tensorboard(player):
     part3 = [{'name': 'Q/overall', 'value': np.float64(0.3), 'step': 10}]
     assert player._summary_writer_collection == part1 + part2 + part3
 
-def test_add_losses_to_tensorboard(player, player_curious):
+def test_add_losses_to_tensorboard(player, curious_player):
     player._arena._episode_count = 10
     player._model._losses = [0.3, 0.1, 0, 1]
     player.add_losses_to_tensorboard()
     assert player._summary_writer_collection == [{'name': 'learning/losses', 'value': 1, 'step': 10}]
 
-    player_curious._arena._episode_count = 10
-    player_curious._model._losses = [0.3, 0.1, 0, 1]
-    player_curious._model_next_state._losses_next_state = [0.3, 0.1, 0, 1, 8]
-    player_curious.add_losses_to_tensorboard()
-    assert player_curious._summary_writer_collection == [{'name': 'learning/losses', 'value': 1, 'step': 10}, {'name': 'learning/losses-next-state', 'value': 8, 'step': 10}]
+    curious_player._arena._episode_count = 10
+    curious_player._model._losses = [0.3, 0.1, 0, 1]
+    curious_player._model_next_state._losses_next_state = [0.3, 0.1, 0, 1, 8]
+    curious_player.add_losses_to_tensorboard()
+    assert curious_player._summary_writer_collection == [{'name': 'learning/losses', 'value': 1, 'step': 10}, {'name': 'learning/losses-next-state', 'value': 8, 'step': 10}]
 
 def test_add_epsilon_to_tensorboard(player):
     player._arena._episode_count = 10
@@ -393,13 +450,6 @@ def test_update_epsilon(player):
     player._arena._episode_count = 100000
     player.update_epsilon()
     assert np.round(player._epsilon, 3) == 0.01
-
-def test_new_game(player):
-    player._total_reward_tagger = 1
-    player._total_reward_runner = 2
-    player.new_game()
-    assert player._total_reward_tagger == 0
-    assert player._total_reward_runner == 0
 
 def test_reload(player):
     input_path = os.getcwd() + r'\tests\input\test.weights.h5'

@@ -6,16 +6,20 @@ class Config:
     def __init__(self):
 
         # Training regime
-        self._maximum_epsilon=1
-        self._minimum_epsilon=0.01
-        self._number_of_episodes_total=2000000
+        self._maximum_epsilon=0.95
+        self._minimum_epsilon=0
+        self._number_of_episodes_total=5000000
         self._number_of_episodes_per_round=10000
-        self._bootstrap_value_epsilon=0.0000025 # formerly lambda
-        self._discount_factor=0.99 # formerly gamma
+        self._bootstrap_value_epsilon=0.0001 # formerly lambda
+        self._discount_factor=0.999 # formerly gamma
         self._preselect_batch=False
-        self._use_probabilities=True
         self._game_play_mode='parallel'
-        self._redo_batch=False
+        self._redo_batch=True
+
+        # Stochastic policy
+        self._use_probabilities = True
+        self._temperature = 100
+        self._temperature_alpha = 0.00001
 
         # Competition regime
         self._number_of_competition_episodes = 100
@@ -34,14 +38,14 @@ class Config:
         self._curiosity_beta=0
 
         # Memory variables
-        self._batch_size=100
+        self._batch_size=10000
         self._memory_size=5000
 
         # Game variables
-        self._grid_size=10
+        self._grid_size=30
         self._number_of_players=2
         self._number_of_taggers=1
-        self._maximum_steps=50
+        self._maximum_steps=150
         self._step_points=1.0
         self._tag_points=51.0
         self._action_size=9
@@ -124,6 +128,18 @@ class Config:
         self._use_probabilities = bool(value)
 
     @property
+    def temperature(self):
+        return self._temperature
+
+    @temperature.setter
+    def temperature(self, value):
+        self._temperature = value
+
+    @property
+    def temperature_alpha(self):
+        return self._temperature_alpha
+
+    @property
     def game_play_mode(self):
         return self._game_play_mode
 
@@ -187,8 +203,6 @@ class Config:
 
     @batch_size.setter
     def batch_size(self, value):
-        if self._game_play_mode == 'parallel':
-            raise Exception("Batch size is only relevant in sequential mode.")
         self._batch_size = int(value)
 
     @property
@@ -316,3 +330,10 @@ class Config:
     def redo_batch(self, value):
         self._redo_batch = bool(value)
 
+    @property
+    def number_of_competition_episodes(self):
+        return self._number_of_competition_episodes
+
+    @number_of_competition_episodes.setter
+    def number_of_competition_episodes(self, value):
+        self._number_of_competition_episodes = value

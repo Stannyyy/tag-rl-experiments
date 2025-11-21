@@ -43,8 +43,10 @@ class Player:
 
         # Identifying variables
         self._name = name
-        self._is_random = False
-        self._is_still = False
+        self._is_agent = True
+
+        # Temperature
+        self._temperature = self._config.temperature
 
         # Model variables
         self._epsilon = config.maximum_epsilon
@@ -57,6 +59,7 @@ class Player:
         self._reward_store_tagger = []
         self._reward_store_runner = []
         self._q_logs = []
+        self._log_probs = []
 
         # State variables
         self._current_reward = 0
@@ -111,12 +114,11 @@ class Player:
         predictions[row_std!=0] /= np.expand_dims(np.sqrt(row_std[row_std!=0]), axis=1)
 
         # Determine temperature
-        temperature = self._epsilon * 100
-        if temperature <= 0:
+        if self.temperature <= 0:
             raise ValueError("temperature must be > 0")
 
         # Softmax with temperature
-        probabilities = np.exp(predictions / temperature) * options
+        probabilities = np.exp(predictions / self.temperature) * options
         probabilities = probabilities / np.sum(probabilities * options, axis=1, keepdims=True)
 
         return probabilities[0] if input_single else probabilities
@@ -140,8 +142,6 @@ class Player:
         Choose action: random based on chance value epsilon OR based on current policy for the given state
         """
         options = np.array(options)
-        # if len(options.shape) == 1:
-        #     options = np.expand_dims(options, axis=0)
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
@@ -169,6 +169,14 @@ class Player:
 
         return option_counts, idx_options, starts
 
+    def update_temperature(self):
+        if len(self._log_probs) != 0:
+            self._temperature *= np.exp(
+                (self._config.temperature_alpha * self._config.number_of_episodes_per_round)
+                * (np.mean(self._log_probs) + 1))
+
+            self._log_probs = []
+
     def choose_many_actions(self, options, selection, competition_game=False):
 
         """
@@ -190,7 +198,7 @@ class Player:
             option_counts, idx_options, starts = self.options_to_eligible_idx(options)
 
             # Random choice
-            rng = np.random.default_rng()
+            rng = np.random.default_rng(0)
             r = rng.integers(0, option_counts)[selection]
 
             # Vector of all choices
@@ -205,7 +213,7 @@ class Player:
                 predictions = self._model.predict_batch(np.array([[self._state_many[selection[0]]]]))
                 predictions = np.expand_dims(predictions, axis=0)
             else:
-                predictions = []
+                predictions = np.array([])
 
             # Filter options
             predictions = predictions.astype(float, copy=False)
@@ -214,8 +222,16 @@ class Player:
             probabilities = self.prediction_to_probabilities(predictions, options[selection])
             choices = np.array([np.random.choice(self._config.action_size, p=row) for row in probabilities])
 
+            # Get log probs to update temperature
+            rows = np.arange(probabilities.shape[0])
+            prob_action = probabilities[rows, choices]
+            self._log_probs += [np.mean(np.log(prob_action))]
+
         else:
-            predictions[~options[selection]] = -np.inf
+            try:
+                predictions[~options[selection]] = -np.inf
+            except Exception as e:
+                print(e)
             choices = np.array([np.argmax(row) for row in predictions])
 
         all_choices = []
@@ -258,13 +274,11 @@ class Player:
             return 0
 
         # Make a random batch
-        print("\rCreating batch", end='')
         batch = self.create_batch(batch_size = batch_size)
         if not batch:
             return 0
 
         # Extract experiences
-        print("\rDissecting batch", end='')
         states = np.array([b[-1][0] for b in batch], dtype=float)
         actions = np.array([b[-1][1] for b in batch], dtype=int)
         rewards = np.array([b[-1][2] for b in batch], dtype=float)
@@ -275,23 +289,18 @@ class Player:
         is_terminal = (next_states == -1).all(axis=1)  # vectorized comparison for object array
 
         # Predict Q(s,a) given the batch of states
-        print("\rPredicting q's for all states", end='')
         q_s_a = self._model.predict_batch(states)
 
         # Predict Q(s',a') - so that we can do gamma * max(Q(s'a')) below
-        print("\rPredicting q's for all next states", end='')
         q_s_a_d = self._model.predict_batch(next_states)
 
         # Clip corrected q
-        print("\rClipping predicted qs", end='')
         corrected_qs = np.clip(q_s_a, -self._config.tag_points, self._config.tag_points)
 
         # Bulk predict next state
         if self._config.curiosity:
-            print("\rPredicting next states for all states", end='')
             predicted_next_state = self._model.predict_batch_next_state(states)
 
-            print("\rAdding curiosity bonus", end='')
             # Mean-squared error across state dimensions per row
             mse = ((predicted_next_state - np.vstack(next_states[~is_terminal])) ** 2).mean(axis=1)
             curiosity_bonus = np.zeros(batch_size, dtype=float)
@@ -299,20 +308,25 @@ class Player:
             rewards += self._config.curiosity_beta * curiosity_bonus
 
         # Non-terminal states: replace with reward+y*maxQ(s',a')-V(s, a)
-        print("\rCorrecting q's of chosen actions of non-terminal states", end='')
         q_next_states = copy.deepcopy(q_s_a_d)
-        v_current_state = np.sum(q_next_states*np.array(options), axis = 1)/np.sum(options, axis = 1)
         q_next_states[~np.array(options)] = -np.inf
+        actions_next_states = np.argmax(q_next_states, axis=1)
         q_next_states = q_next_states.max(axis=1)
-        corrected_qs[np.arange(batch_size),actions] = rewards + self._config.discount_factor * q_next_states - v_current_state
+
+        # Correct qs
+        if self._config.use_probabilities:
+            probabilities = self.prediction_to_probabilities(q_s_a, options)
+            rows = np.arange(probabilities.shape[0])
+            prob_actions = np.log(probabilities[rows, actions_next_states])
+            corrected_qs[np.arange(batch_size), actions] = rewards + self._config.discount_factor * (q_next_states - self._config.temperature_alpha * prob_actions)
+        else:
+            corrected_qs[np.arange(batch_size),actions] = rewards + self._config.discount_factor * q_next_states
 
         # Overwrite terminal states: replace with reward
-        print("\rCorrecting q's of chosen actions of terminal states", end='')
         corrected_qs[is_terminal, actions[is_terminal]] = rewards[is_terminal]
 
         # Filter batch
         if self._config.preselect_batch:
-            print("\rFiltering batch", end='')
             correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a), axis=1),1)
             idx_selection = np.argsort(correction_diff)[::-1][:int(batch_size/4)]
             all_states_selection = states[idx_selection]
@@ -322,7 +336,6 @@ class Player:
             corrected_qs_selection = corrected_qs
 
         # Train batch
-        print("\rLearn!", end='')
         self._model.train_batch(all_states_selection, corrected_qs_selection, self._log_path,
                                              epochs=epochs, verbose=verbose)
         if self._config.curiosity:
@@ -381,7 +394,6 @@ class Player:
             ]
 
     def add_losses_to_tensorboard(self):
-
         loss = self._model.losses[-1]
         self._summary_writer_collection += [{
             "name": 'learning/losses',
@@ -582,9 +594,13 @@ class Player:
         self._summary_writer = tf.summary.create_file_writer(self._log_path)
         # exec(self._tboard_callback_command)
 
+    def add_episode_experience(self, episode_experience):
+        self._memory.experience = episode_experience
+        self._memory.add_experience()
+
     @property
-    def is_random(self):
-        return self._is_random
+    def is_agent(self):
+        return self._is_agent
 
     @property
     def name(self):
@@ -653,6 +669,14 @@ class Player:
         self._total_reward_runner = total_reward_runner
 
     @property
+    def temperature(self):
+        return self._temperature
+
+    @temperature.setter
+    def temperature(self, value):
+        self._temperature = value
+
+    @property
     def current_options(self):
         return self._current_options
 
@@ -689,14 +713,30 @@ class Player:
         return self._config
 
 
-# Player
+# Random player
 class RandomPlayer:
 
-    def __init__(self, name):
+    def __init__(self, config, path, name=None, model=None, model_next_state=None, memory=None, **kwargs):
+
+        # Import config
+        config = copy.deepcopy(config)
+        for key, value in kwargs.items():
+            setattr(config, key, value)
+
+        self._config = config
+
+        # Import models
+        if model is None:
+            self._model = Model(config)
+        else:
+            self._model = model
+
         # Identifying variables
-        self._name = name
-        self._is_random = True
-        self._is_still = False
+        if name is None:
+            self._name = 'Randy Rando'
+        else:
+            self._name = name
+        self._is_agent = False
 
         # Collection variables
         self._reward_store_tagger = []
@@ -707,18 +747,60 @@ class RandomPlayer:
         self._total_reward_tagger = 0
         self._total_reward_runner = 0
 
-    def choose_action(self, options, save_game, game=None):
-        if not options:
-            return 0
-        return random.sample(options, k=1)[0]
+        # Save intermittent folders
+        self._state_path = os.path.join(path, "state", f"{self._name.replace(' ', '')}.pickle")
+        self._checkpoint_path = os.path.join(path, "checkpoints", self._name)
+        self._log_path = os.path.join(path, "logs", f"dql_{self._name}")
+
+        # Set up the tensorboard
+        self._summary_writer = tf.summary.create_file_writer(self._log_path)
+        self._summary_writer_collection = []
+
+    @staticmethod
+    def choose_action(options, save_game, game=None):
+        choice = random.sample(np.where(options)[0].tolist(), k=1)[0]
+        return choice
+
+    @staticmethod
+    def options_to_eligible_idx(options):
+        # Vectorized parsing of options to be able to choose an action randomly
+        idx_options = options.nonzero()[1]
+        option_counts = options.sum(axis=1)
+        starts = np.cumsum(np.r_[0, option_counts[:-1]])
+
+        return option_counts, idx_options, starts
+
+    def choose_many_actions(self, options, selection, competition_game=False):
+
+        """
+        Choose many action: random based on chance value epsilon OR based on current policy for the given state
+        for all games in the batch in parallel
+        """
+
+        options = np.array(options)
+
+        # Dissect options
+        option_counts, idx_options, starts = self.options_to_eligible_idx(options)
+
+        # Random choice
+        rng = np.random.default_rng(0)
+        r = rng.integers(0, option_counts)[selection]
+
+        # Vector of all choices
+        picked_cols = idx_options[starts[selection] + r]
+        all_choices = np.full(options.shape[0], 8, dtype=int)
+        all_choices[selection] = picked_cols
+        return all_choices
 
     def new_game(self):
         self._total_reward_tagger = 0
         self._total_reward_runner = 0
 
     def update_reward_store(self):
-        self._reward_store_tagger.append(float(self._total_reward_tagger))
-        self._reward_store_runner.append(float(self._total_reward_runner))
+        if self._total_reward_tagger != 0:
+            self._reward_store_tagger.append(float(self._total_reward_tagger))
+        if self._total_reward_runner != 0:
+            self._reward_store_runner.append(float(self._total_reward_runner))
 
     def add_rewards_to_tensorboard(self, turn_count):
         pass
@@ -732,15 +814,61 @@ class RandomPlayer:
     def reload(self, arena):
         pass
 
+    def add_episode_experience(self, episode_experience):
+        pass
 
-# Player
+    @property
+    def is_agent(self):
+        return self._is_agent
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def total_reward_tagger(self):
+        return self._total_reward_tagger
+
+    @total_reward_tagger.setter
+    def total_reward_tagger(self, total_reward_tagger):
+        self._total_reward_tagger = total_reward_tagger
+
+    @property
+    def total_reward_runner(self):
+        return self._total_reward_runner
+
+    @total_reward_runner.setter
+    def total_reward_runner(self, total_reward_runner):
+        self._total_reward_runner = total_reward_runner
+
+    @property
+    def config(self):
+        return self._config
+
+# Still player
 class StillPlayer:
 
-    def __init__(self, name):
+    def __init__(self, config, path, name=None, model=None, model_next_state=None, memory=None, **kwargs):
+
+        # Import config
+        config = copy.deepcopy(config)
+        for key, value in kwargs.items():
+            setattr(config, key, value)
+
+        self._config = config
+
+        # Import models
+        if model is None:
+            self._model = Model(config)
+        else:
+            self._model = model
+
         # Identifying variables
-        self._name = name
-        self._is_random = True
-        self._is_still = True
+        if name is None:
+            self._name = 'Still Steve'
+        else:
+            self._name = name
+        self._is_agent = False
 
         # Collection variables
         self._reward_store_tagger = []
@@ -751,16 +879,40 @@ class StillPlayer:
         self._total_reward_tagger = 0
         self._total_reward_runner = 0
 
-    def choose_action(self, options, save_game, game=None):
-        return 8
+        # Save intermittent folders
+        self._state_path = os.path.join(path, "state", f"{self._name.replace(' ', '')}.pickle")
+        self._checkpoint_path = os.path.join(path, "checkpoints", self._name)
+        self._log_path = os.path.join(path, "logs", f"dql_{self._name}")
+
+        # Set up the tensorboard
+        self._summary_writer = tf.summary.create_file_writer(self._log_path)
+        self._summary_writer_collection = []
+
+    @staticmethod
+    def choose_action(options, save_game, game=None):
+        choice = 8
+        return choice
+
+    @staticmethod
+    def choose_many_actions(options, selection, competition_game=False):
+
+        """
+        Choose many action: random based on chance value epsilon OR based on current policy for the given state
+        for all games in the batch in parallel
+        """
+
+        all_choices = np.array(len(options)*[8])
+        return all_choices
 
     def new_game(self):
         self._total_reward_tagger = 0
         self._total_reward_runner = 0
 
     def update_reward_store(self):
-        self._reward_store_tagger.append(float(self._total_reward_tagger))
-        self._reward_store_runner.append(float(self._total_reward_runner))
+        if self._total_reward_tagger != 0:
+            self._reward_store_tagger.append(float(self._total_reward_tagger))
+        if self._total_reward_runner != 0:
+            self._reward_store_runner.append(float(self._total_reward_runner))
 
     def add_rewards_to_tensorboard(self, turn_count):
         pass
@@ -773,3 +925,34 @@ class StillPlayer:
 
     def reload(self, arena):
         pass
+
+    def add_episode_experience(self, episode_experience):
+        pass
+
+    @property
+    def is_agent(self):
+        return self._is_agent
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def total_reward_tagger(self):
+        return self._total_reward_tagger
+
+    @total_reward_tagger.setter
+    def total_reward_tagger(self, total_reward_tagger):
+        self._total_reward_tagger = total_reward_tagger
+
+    @property
+    def total_reward_runner(self):
+        return self._total_reward_runner
+
+    @total_reward_runner.setter
+    def total_reward_runner(self, total_reward_runner):
+        self._total_reward_runner = total_reward_runner
+
+    @property
+    def config(self):
+        return self._config

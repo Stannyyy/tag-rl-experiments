@@ -42,7 +42,7 @@ class Arena:
 
             unique_players = list(set(self._moderator.players))
             for player in unique_players:
-                if ~player.is_random:
+                if player.is_agent:
                     # Print progress
                     av_loss = np.array(player.model.losses[-100:]).mean().round(3)
                     av_rwd_tagger = np.array(player.reward_store_tagger[-100:]).mean().round(2)
@@ -56,9 +56,10 @@ class Arena:
                         self._episode_count = self._config.number_of_episodes_total # Call it a day
 
             # Show a couple of episodes
-            if self._config.create_video:
-                for i in range(2):
-                    self._moderator.play_one(save_game=True, learn=False)
+            if self._episode_count % (self._config._number_of_episodes_per_round * 10) == 1:
+                if self._config.create_video:
+                    for i in range(6):
+                        self._moderator.play_one(save_game=True, learn=False)
 
             # Save models
             self.save_status()
@@ -66,7 +67,7 @@ class Arena:
     def save_status(self):
         unique_players = list(set(self._moderator.players))
         for player in unique_players:
-            if player.is_random == False:
+            if player.is_agent:
 
                 # Save model
                 if self._config.test_mode == False:
@@ -79,7 +80,7 @@ class Arena:
                 # Save status
                 self._moderator = None
                 with open(player.state_path, "wb") as file_:
-                    pickle.dump(self, file_, -1)
+                    pickle.dump((self, player.temperature), file_, -1)
                 player.reload(self)
 
 
