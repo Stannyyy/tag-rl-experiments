@@ -250,6 +250,7 @@ class Moderator:
 
             # Learn!
             if learn & player.is_agent:
+                print("\nLearn!")
                 if player.config.redo_batch:
                     num_batches = int(len(player.memory.experiences) / player.config.batch_size) + 1
                     for i in range(num_batches):
@@ -258,11 +259,11 @@ class Moderator:
                 else:
                     player.learn_by_replay(len(player.memory.experiences), epochs=100, verbose=True)
 
-                # Update temperature
-                player.update_temperature()
-
                 # Add logs to tensorboard
                 player.add_logs_to_tensorboard()
+
+                # Update temperature
+                player.update_temperature()
 
     @property
     def players(self):

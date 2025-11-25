@@ -59,7 +59,8 @@ class Player:
         self._reward_store_tagger = []
         self._reward_store_runner = []
         self._q_logs = []
-        self._log_probs = []
+        self._log_probabilities_of_chosen_actions = []
+        self._probabilities_of_chosen_actions = []
 
         # State variables
         self._current_reward = 0
@@ -170,12 +171,12 @@ class Player:
         return option_counts, idx_options, starts
 
     def update_temperature(self):
-        if len(self._log_probs) != 0:
+        if len(self._log_probabilities_of_chosen_actions) != 0:
             self._temperature *= np.exp(
                 (self._config.temperature_alpha * self._config.number_of_episodes_per_round)
-                * (np.mean(self._log_probs) + 1))
+                * (np.mean(self._log_probabilities_of_chosen_actions) + self._config.temperature_factor))
 
-            self._log_probs = []
+            self._log_probabilities_of_chosen_actions = []
 
     def choose_many_actions(self, options, selection, competition_game=False):
 
@@ -195,14 +196,14 @@ class Player:
         if (chance_value < self._epsilon) and (competition_game == False):
 
             # Dissect options
-            option_counts, idx_options, starts = self.options_to_eligible_idx(options)
+            option_counts, idx_options, starts = self.options_to_eligible_idx(options[selection])
 
             # Random choice
             rng = np.random.default_rng(0)
-            r = rng.integers(0, option_counts)[selection]
+            r = rng.integers(0, option_counts)
 
             # Vector of all choices
-            picked_cols = idx_options[starts[selection] + r]
+            picked_cols = idx_options[starts + r]
             all_choices = np.full(options.shape[0], 8, dtype=int)
             all_choices[selection] = picked_cols
             return all_choices
@@ -222,10 +223,11 @@ class Player:
             probabilities = self.prediction_to_probabilities(predictions, options[selection])
             choices = np.array([np.random.choice(self._config.action_size, p=row) for row in probabilities])
 
-            # Get log probs to update temperature
+            # Get log probabilities to update temperature
             rows = np.arange(probabilities.shape[0])
-            prob_action = probabilities[rows, choices]
-            self._log_probs += [np.mean(np.log(prob_action))]
+            probability_action = probabilities[rows, choices]
+            self._log_probabilities_of_chosen_actions += [np.mean(np.log(probability_action))]
+            self._probabilities_of_chosen_actions += [np.mean(probability_action)]
 
         else:
             try:
@@ -363,6 +365,7 @@ class Player:
         self.add_episode_times_to_tensorboard()
         self.add_losses_to_tensorboard()
         self.add_qs_to_tensorboard()
+        self.add_temperature_to_tensorboard()
 
     def add_qs_to_tensorboard(self):
         q_logs = self._q_logs[-1]
@@ -389,6 +392,23 @@ class Player:
                 {
                     "name": 'Q/tagged-state-of-alternative-action',
                     "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
+                    "step": self._arena.episode_count
+                }
+            ]
+
+    def add_temperature_to_tensorboard(self):
+        self._summary_writer_collection += [
+            {
+                "name": 'temperature/temperature',
+                "value": self.temperature,
+                "step": self._arena.episode_count
+            }
+        ]
+        if len(self._probabilities_of_chosen_actions) > 0:
+            self._summary_writer_collection += [
+                {
+                    "name": 'temperature/probabilities-of-chosen-actions',
+                    "value": np.mean(self._probabilities_of_chosen_actions),
                     "step": self._arena.episode_count
                 }
             ]

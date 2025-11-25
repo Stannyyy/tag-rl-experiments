@@ -6,11 +6,11 @@ class Config:
     def __init__(self):
 
         # Training regime
-        self._maximum_epsilon=0.95
+        self._maximum_epsilon=1
         self._minimum_epsilon=0
         self._number_of_episodes_total=5000000
         self._number_of_episodes_per_round=10000
-        self._bootstrap_value_epsilon=0.0001 # formerly lambda
+        self._bootstrap_value_epsilon=0.000001 # formerly lambda
         self._discount_factor=0.999 # formerly gamma
         self._preselect_batch=False
         self._game_play_mode='parallel'
@@ -19,7 +19,9 @@ class Config:
         # Stochastic policy
         self._use_probabilities = True
         self._temperature = 100
-        self._temperature_alpha = 0.00001
+        self._temperature_alpha = 0.000001
+        self._average_end_probability = 90
+        self._temperature_factor = None
 
         # Competition regime
         self._number_of_competition_episodes = 100
@@ -62,7 +64,21 @@ class Config:
 
         # Derived attributes
         self._state_size = 2 * self._number_of_players + 2
-        
+
+        # Calculate temperature factor
+        self.temperature_factor_from_average_end_probability()
+
+    def temperature_factor_from_average_end_probability(self):
+        if self._action_size != 9:
+            raise Exception("Action size must be 9 for this function to work.")
+        end_factors = [0.001, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5,
+                       0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.5]
+        end_probabilities = [1.0, 0.997, 0.995, 0.992, 0.989, 0.988, 0.984, 0.978, 0.976, 0.974, 0.971, 0.948, 0.934,
+                             0.906, 0.888, 0.849, 0.801, 0.759, 0.705, 0.651, 0.599, 0.558, 0.502, 0.457, 0.41, 0.357,
+                             0.315, 0.273, 0.244, 0.206, 0.179, 0.151, 0.111]
+        closest_index = min(range(len(end_probabilities)), key=lambda i: abs(end_probabilities[i] - self._average_end_probability))
+        self._temperature_factor = end_factors[closest_index]
+
     @property
     def maximum_epsilon(self):
         return self._maximum_epsilon
@@ -138,6 +154,14 @@ class Config:
     @property
     def temperature_alpha(self):
         return self._temperature_alpha
+
+    @property
+    def temperature_factor(self):
+        return self._temperature_factor
+
+    @temperature_factor.setter
+    def temperature_factor(self, value):
+        raise Exception("Use factor_from_average_probability module to set temperature_factor")
 
     @property
     def game_play_mode(self):
