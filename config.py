@@ -30,11 +30,6 @@ class Config:
         self._learning_rate=0.00001
         self._layers=[100, 100, 100]
 
-        # Architecture options
-        ## LSTM
-        self._add_lstm=False
-        self._sequence_length_lstm=1
-
         # Memory variables
         self._batch_size=100000
         self._memory_size=5000
@@ -180,22 +175,6 @@ class Config:
     @layers.setter
     def layers(self, value):
         self._layers = list(value)
-
-    @property
-    def add_lstm(self):
-        return self._add_lstm
-
-    @add_lstm.setter
-    def add_lstm(self, value):
-        self._add_lstm = bool(value)
-
-    @property
-    def sequence_length_lstm(self):
-        return self._sequence_length_lstm
-
-    @sequence_length_lstm.setter
-    def sequence_length_lstm(self, value):
-        self._sequence_length_lstm = int(value)
 
     @property
     def batch_size(self):

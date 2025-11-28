@@ -42,15 +42,11 @@ class Model:
         """
         with find_device():
             layers = []
-            for layer_nr, layer in enumerate(self._config.layers):
-                if self._config.add_lstm and (layer_nr == 0):
-                    # LSTM as the first layer when add_lstm is enabled
-                    layers += [tf.keras.layers.LSTM(units=layer)]
-                else:
-                    # Dense layers where the number of units is defined by self.layers
-                    # PReLU is a leaky relu of which alpha is learned
-                    layers += [tf.keras.layers.Dense(layer),
-                               tf.keras.layers.PReLU()]
+            for layer in self._config.layers:
+                # Dense layers where the number of units is defined by self.layers
+                # PReLU is a leaky relu of which alpha is learned
+                layers += [tf.keras.layers.Dense(layer),
+                           tf.keras.layers.PReLU()]
 
             # Finalize with an output layer to predict the Q values for all the different actions
             layers += [tf.keras.layers.Dense(self._config.action_size, activation='linear')]
@@ -72,10 +68,6 @@ class Model:
         if len(state[0]) == 0:
             return np.array([])
 
-        # If add_lstm is enabled, reshape the state into one that can be used by the LSTM layer of the model
-        if self._config.add_lstm:
-            state = np.array(state).astype(float).reshape(1, self._config.sequence_length_lstm, self._config.state_size)
-
         # Predict Q values
         prediction = self._model.predict(np.array(state), verbose=0)
 
@@ -94,11 +86,6 @@ class Model:
         # A batch of one is just one
         if len(states) == 1:
             return self.predict_one(states[0])
-
-        # Prep for LSTM if necessary
-        if self._config.add_lstm:
-            states = states.astype(float).reshape(
-                (self._config.batch_size, self._config.sequence_length_lstm, self._config.state_size))
 
         # Predict Q values
         predictions = self._model.predict(states, verbose=0)

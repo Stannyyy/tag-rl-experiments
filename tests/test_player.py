@@ -129,13 +129,6 @@ def test_state_to_prediction(custom_player):
     prediction = custom_player.state_to_prediction()
     assert np.allclose(prediction, np.array([0.02986243, -0.04738425]), atol=0.00001)
 
-    custom_player.config.add_lstm = True
-    custom_player.config.sequence_length_lstm = 3
-    custom_player._memory._experiences = np.array([[0, 1], [1, 0], [0, 0]])
-    custom_player._model = Model(config=custom_player.config)
-    prediction = custom_player.state_to_prediction()
-    assert np.allclose(prediction, np.array([0.01279932, 0.02213031]), atol=0.00001)
-
 def test_choose_action(player, random_player, still_player):
     player._epsilon = 0.5
     player._state = [0, 1]
@@ -389,10 +382,6 @@ def test_create_batch(custom_player):
 
     batch = custom_player.create_batch(1)
     assert np.all(batch[0][0] == np.array([1, 0]))
-
-    # TODO: add case LSTM
-    custom_player._config._add_lstm = 10
-    custom_player._model._sequence_length_lstm = 2
 
 def test_show_q_in_state(player, game):
     player._state = [0, 1, 0, 1, 0, 1]

@@ -8,16 +8,12 @@ from config import Config
 @pytest.fixture
 def models():
     config1 = Config()
-    config2 = Config(); config2.add_lstm = True; config2.sequence_length_lstm = 3
-    config3 = Config(); config3.layers = [10, 10, 10]
-    config4 = Config(); config4.add_lstm = True; config4.sequence_length_lstm = 3; config4.layers = [10, 10, 10]
-    config5 = Config(); config5.learningRate = 0.01
+    config2 = Config(); config1.layers = [10, 10, 10]
+    config3 = Config(); config2.learningRate = 0.01
 
     return (Model(config=config1),
             Model(config=config2),
-            Model(config=config3),
-            Model(config=config4),
-            Model(config=config5))
+            Model(config=config3))
 
 @pytest.fixture(autouse=True)
 def set_seed():
@@ -27,33 +23,17 @@ def set_seed():
     yield
 
 def test_define_model_predict_one(models):
-    model1, model2, model3, model4, _ = models
+    model1, model2, model3 = models
 
     pred1 = model1.predict_one(state=[[0.0, 1.0, 2.0, 3.0]])
     assert isinstance(pred1, np.ndarray)
     assert pred1.shape == (model1._config.action_size,)
     assert len(model1._model.layers) == len(model1._config.layers)*2+1
 
-    state = [list(range(model2._config.state_size))]
-    experiences = [[state[0],0]] * 10
-    last_x_minus_1_experiences = experiences[(model2._config.sequence_length_lstm * -1 + 1):]
-    pred2 = model2.predict_one(state=[s[0] for s in last_x_minus_1_experiences] + state)
+    pred2 = model2.predict_one(state=[[0.0, 1.0, 2.0, 3.0]])
     assert isinstance(pred2, np.ndarray)
-    assert pred2.shape == (model2._config.action_size,)
-    assert len(model2._model.layers) == ((len(model2._config.layers)-1)*2)+2
-
-    pred3 = model3.predict_one(state=[[0.0, 1.0, 2.0, 3.0]])
-    assert isinstance(pred3, np.ndarray)
-    assert pred3.shape == (model3._config.action_size,)
+    assert pred2.shape == (model3._config.action_size,)
     assert len(model3._model.layers) == len(model3._config.layers)*2+1
-
-    state = [list(range(model4._config.state_size))]
-    experiences = [[state[0],0]] * 10
-    last_x_minus_1_experiences = experiences[(model2._config.sequence_length_lstm * -1 + 1):]
-    pred4 = model4.predict_one(state=[s[0] for s in last_x_minus_1_experiences] + state)
-    assert isinstance(pred4, np.ndarray)
-    assert pred4.shape == (model4._config.action_size,)
-    assert len(model4._model.layers) == ((len(model4._config.layers)-1)*2)+2
 
 
 def test_predict_batch(models):

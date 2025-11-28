@@ -119,17 +119,7 @@ class Player:
         return probabilities[0] if input_single else probabilities
 
     def state_to_prediction(self):
-        if self._config.add_lstm:
-            ix_sequence_start = self._config.sequence_length_lstm * -1 + 1
-            if ix_sequence_start == 0:
-                last_x_minus_1_experiences = []
-            else:
-                last_x_minus_1_experiences = self._memory.experiences[(self._config.sequence_length_lstm * -1 + 1):]
-            prediction = self._model.predict_one(np.concatenate((last_x_minus_1_experiences, np.array([self._state])), axis=0))
-        else:
-            prediction = self._model.predict_one(np.array([self._state]))
-
-        return prediction
+        return self._model.predict_one(np.array([self._state]))
 
     def choose_action(self, options, save_game):
 
@@ -180,10 +170,6 @@ class Player:
         """
 
         options = np.array(options)
-
-        # Check requirements
-        if self._config.add_lstm:
-            raise Exception("LSTM option is not yet suitable to use with parallel mode")
 
         # Use chance to see whether to explore or exploit
         chance_value = random.random()
@@ -458,53 +444,14 @@ class Player:
         if batch_size is None:
             batch_size = int(self._config.batch_size)
 
-        # Create a batch for the case of LSTM
-        if self._config.add_lstm:
+        selection_pool_size = len(self._memory.experiences)
 
-            selection_pool_size = len(self._memory.experiences) - self._model.sequence_length_lstm
+        if selection_pool_size < batch_size:
+            return []
 
-            # Guard: not enough experiences to form a sequence
-            if selection_pool_size < batch_size:
-                return []
+        selection = random.choices(range(selection_pool_size), k=batch_size)
 
-            selection = random.choices(range(selection_pool_size), k=batch_size)
-
-            batch = []
-            while len(batch) < batch_size:
-                for i in selection:
-                    experiences_i = []
-                    add_i = 0
-                    compare_4 = self._memory.experiences[i][0][4]
-                    compare_5 = self._memory.experiences[i][0][5]
-                    while len(experiences_i) < self._model.sequence_length_lstm:
-                        if (compare_4 == self._memory.experiences[i + add_i][0][4]) and (
-                                compare_5 == self._memory.experiences[i + add_i][0][5]):
-                            if i + add_i >= (len(self._memory.experiences) - 1):
-                                break
-                            if self._memory.experiences[i + add_i][4] is None:
-                                if len(experiences_i) != (self._config.sequence_length_lstm - 1):
-                                    break
-                            experiences_i += [self._memory.experiences[i + add_i]]
-                        add_i += 1
-                    if len(experiences_i) == self._config.sequence_length_lstm:
-                        batch += [experiences_i]
-                    else:
-                        continue
-                remaining = batch_size - len(batch)
-                if remaining <= 0:
-                    break
-                selection = random.choices(range(selection_pool_size), k=remaining)
-
-        # Create a batch for the case that it is not LSTM
-        else:
-            selection_pool_size = len(self._memory.experiences)
-
-            if selection_pool_size < batch_size:
-                return []
-
-            selection = random.choices(range(selection_pool_size), k=batch_size)
-
-            batch = [[self._memory.experiences[i]] for i in selection]
+        batch = [[self._memory.experiences[i]] for i in selection]
 
         return batch
 
@@ -541,15 +488,8 @@ class Player:
     def reload(self, arena, checkpoint_path_overwrite = None):
 
         self._arena = arena
-
-        if self._config.add_lstm:
-            input_shape = (None, self._model.sequence_length_lstm, self._config.state_size)
-        else:
-            input_shape = (None, self._config.state_size)
-
         self._model.define_model()
-        self._model.model.build(input_shape=input_shape)
-
+        self._model.model.build(input_shape=(None, self._config.state_size))
         self.update_epsilon()
 
         if checkpoint_path_overwrite is not None:
