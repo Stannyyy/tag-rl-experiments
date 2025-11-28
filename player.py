@@ -5,13 +5,13 @@ import math
 import tensorflow as tf
 import copy
 import os
-from model import Model, ModelNextState
+from model import Model
 from memory import Memory
 
 # Player
 class Player:
 
-    def __init__(self, config, path, name, model=None, model_next_state=None, memory=None, **kwargs):
+    def __init__(self, config, path, name, model=None, memory=None, **kwargs):
 
         # Import config
         config = copy.deepcopy(config)
@@ -25,12 +25,6 @@ class Player:
             self._model = Model(config)
         else:
             self._model = model
-
-        if config.curiosity:
-            if model_next_state is None:
-                self._model_next_state = ModelNextState(config)
-            else:
-                self._model_next_state = model_next_state
 
         # Import memory
         if memory is None:
@@ -266,10 +260,7 @@ class Player:
 
         # If batch_size undefined, fill with config batch size
         if batch_size is None:
-            if self._config.preselect_batch:
-                batch_size = int(self._config.batch_size * 4)
-            else:
-                batch_size = int(self._config.batch_size)
+            batch_size = int(self._config.batch_size)
 
         # Only learn once memory has reached batch size and not in test mode
         if self._config.test_mode or (len(self._memory.experiences) < batch_size):
@@ -299,16 +290,6 @@ class Player:
         # Clip corrected q
         corrected_qs = np.clip(q_s_a, -self._config.tag_points, self._config.tag_points)
 
-        # Bulk predict next state
-        if self._config.curiosity:
-            predicted_next_state = self._model.predict_batch_next_state(states)
-
-            # Mean-squared error across state dimensions per row
-            mse = ((predicted_next_state - np.vstack(next_states[~is_terminal])) ** 2).mean(axis=1)
-            curiosity_bonus = np.zeros(batch_size, dtype=float)
-            curiosity_bonus[~is_terminal] = self._config.curiosity_beta * mse
-            rewards += self._config.curiosity_beta * curiosity_bonus
-
         # Non-terminal states: replace with reward+y*maxQ(s',a')-V(s, a)
         q_next_states = copy.deepcopy(q_s_a_d)
         q_next_states[~np.array(options)] = -np.inf
@@ -320,30 +301,16 @@ class Player:
             probabilities = self.prediction_to_probabilities(q_s_a, options)
             rows = np.arange(probabilities.shape[0])
             prob_actions = np.log(probabilities[rows, actions_next_states])
-            corrected_qs[np.arange(batch_size), actions] = rewards + self._config.discount_factor * (q_next_states - self._config.temperature_alpha * prob_actions)
+            corrected_qs[np.arange(batch_size), actions] = rewards + self._config.discount_factor * (q_next_states - self._config.temperature_beta * prob_actions)
         else:
             corrected_qs[np.arange(batch_size),actions] = rewards + self._config.discount_factor * q_next_states
 
         # Overwrite terminal states: replace with reward
         corrected_qs[is_terminal, actions[is_terminal]] = rewards[is_terminal]
 
-        # Filter batch
-        if self._config.preselect_batch:
-            correction_diff = np.round(np.sum(np.abs(corrected_qs - q_s_a), axis=1),1)
-            idx_selection = np.argsort(correction_diff)[::-1][:int(batch_size/4)]
-            all_states_selection = states[idx_selection]
-            corrected_qs_selection = corrected_qs[idx_selection]
-        else:
-            all_states_selection = states
-            corrected_qs_selection = corrected_qs
-
         # Train batch
-        self._model.train_batch(all_states_selection, corrected_qs_selection, self._log_path,
+        self._model.train_batch(states, corrected_qs, self._log_path,
                                              epochs=epochs, verbose=verbose)
-        if self._config.curiosity:
-            # Train batch next state
-            self._model_next_state.train_batch_next_state(states, next_states)
-
         self.update_epsilon()
 
         # Add q to tensorboard
@@ -368,33 +335,34 @@ class Player:
         self.add_temperature_to_tensorboard()
 
     def add_qs_to_tensorboard(self):
-        q_logs = self._q_logs[-1]
-        found_end_states = q_logs[0] > 0
-        if found_end_states:
-            q_s_a, q_crucial_action, q_alternative_action = q_logs[1:]
-        else:
-            q_s_a = q_logs[1]
-
-        self._summary_writer_collection += [
-            {"name": 'Q/overall',
-             "value": np.round(np.mean(np.abs(q_s_a)), 1),
-             "step": self._arena.episode_count}
-        ]
-
-        if found_end_states:
+        if len(self._q_logs) > 0:
+            q_logs = self._q_logs[-1]
+            found_end_states = q_logs[0] > 0
+            if found_end_states:
+                q_s_a, q_crucial_action, q_alternative_action = q_logs[1:]
+            else:
+                q_s_a = q_logs[1]
 
             self._summary_writer_collection += [
-                {
-                    "name": 'Q/tagged-state-of-crucial-action',
-                    "value": np.round(np.mean(np.abs(q_crucial_action)), 1),
-                    "step": self._arena.episode_count
-                },
-                {
-                    "name": 'Q/tagged-state-of-alternative-action',
-                    "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
-                    "step": self._arena.episode_count
-                }
+                {"name": 'Q/overall',
+                 "value": np.round(np.mean(np.abs(q_s_a)), 1),
+                 "step": self._arena.episode_count}
             ]
+
+            if found_end_states:
+
+                self._summary_writer_collection += [
+                    {
+                        "name": 'Q/tagged-state-of-crucial-action',
+                        "value": np.round(np.mean(np.abs(q_crucial_action)), 1),
+                        "step": self._arena.episode_count
+                    },
+                    {
+                        "name": 'Q/tagged-state-of-alternative-action',
+                        "value": np.round(np.mean(np.abs(q_alternative_action)), 1),
+                        "step": self._arena.episode_count
+                    }
+                ]
 
     def add_temperature_to_tensorboard(self):
         self._summary_writer_collection += [
@@ -414,18 +382,11 @@ class Player:
             ]
 
     def add_losses_to_tensorboard(self):
-        loss = self._model.losses[-1]
-        self._summary_writer_collection += [{
-            "name": 'learning/losses',
-            "value": loss,
-            "step": self._arena.episode_count
-        }]
-
-        if self._config.curiosity:
-            loss_next_state = self._model_next_state.losses_next_state[-1]
+        if len(self._model.losses) > 0:
+            loss = self._model.losses[-1]
             self._summary_writer_collection += [{
-                "name": 'learning/losses-next-state',
-                "value": loss_next_state,
+                "name": 'learning/losses',
+                "value": loss,
                 "step": self._arena.episode_count
             }]
 
@@ -600,17 +561,6 @@ class Player:
             if checkpoints:
                 self._model.load_checkpoint(os.path.join(self._checkpoint_path, checkpoints[-1]))
 
-        if self._config.curiosity:
-            self._model_next_state.define_model_next_state()
-            self._model_next_state.build(input_shape=input_shape)
-            if checkpoint_path_overwrite is not None:
-                self._model_next_state.load_checkpoint(checkpoint_path_overwrite.replace('.keras', '-next-state.keras'))
-            else:
-                checkpoints_next_state = [p for p in os.listdir(self._checkpoint_path) if
-                                          '-next-state' in p and p.endswith('.keras')]
-                checkpoints_next_state.sort()
-                if checkpoints_next_state:
-                    self._model_next_state.load_checkpoint_next_state(os.path.join(self._checkpoint_path, checkpoints_next_state[-1]))
         self._summary_writer = tf.summary.create_file_writer(self._log_path)
         # exec(self._tboard_callback_command)
 
@@ -717,10 +667,6 @@ class Player:
         return self._model
 
     @property
-    def model_next_state(self):
-        return self._model_next_state
-
-    @property
     def arena(self):
         return self._arena
 
@@ -736,7 +682,7 @@ class Player:
 # Random player
 class RandomPlayer:
 
-    def __init__(self, config, path, name=None, model=None, model_next_state=None, memory=None, **kwargs):
+    def __init__(self, config, path, name=None, model=None, memory=None, **kwargs):
 
         # Import config
         config = copy.deepcopy(config)
@@ -868,7 +814,7 @@ class RandomPlayer:
 # Still player
 class StillPlayer:
 
-    def __init__(self, config, path, name=None, model=None, model_next_state=None, memory=None, **kwargs):
+    def __init__(self, config, path, name=None, model=None, memory=None, **kwargs):
 
         # Import config
         config = copy.deepcopy(config)

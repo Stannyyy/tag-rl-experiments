@@ -56,9 +56,9 @@ class Arena:
                         self._episode_count = self._config.number_of_episodes_total # Call it a day
 
             # Show a couple of episodes
-            if self._episode_count % (self._config._number_of_episodes_per_round * 10) == 1:
+            if self._episode_count % (self._config._number_of_episodes_per_round * 100) == 1:
                 if self._config.create_video:
-                    for i in range(6):
+                    for i in range(10):
                         self._moderator.play_one(save_game=True, learn=False)
 
             # Save models
@@ -73,8 +73,6 @@ class Arena:
                 if self._config.test_mode == False:
                     checkpoint_path_version = os.path.join(player.checkpoint_path, f'cp-{self._episode_count:06d}')
                     player.model.save_checkpoint(checkpoint_path_version)
-                    if player.config.curiosity:
-                        player.model.save_checkpoint_next_state(checkpoint_path_version)
                 player.write_summary_to_tensorboard()
 
                 # Save status

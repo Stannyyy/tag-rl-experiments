@@ -528,7 +528,9 @@ class Game:
 
             imgs = [Image.open(fn) for fn in frame_files]
             # duration in ms per frame; adjust as needed instead of duplicating frames
-            duration = 100
+            duration = 150
+            gif_save_path = os.path.join(self._display_path, f"{game_path}.gif")
+            os.makedirs(os.path.dirname(gif_save_path), exist_ok=True)
             imgs[0].save(
                 os.path.join(self._display_path, f"{game_path}.gif"),
                 save_all=True,

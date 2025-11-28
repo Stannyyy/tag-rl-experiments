@@ -50,11 +50,7 @@ class Experiment:
         for player in self._experiment_players:
             player_name = player.name
             os.makedirs(os.path.join(self._path, 'checkpoints', player_name), exist_ok=True)
-            os.makedirs(os.path.join(self._path, 'display-games', player_name, player_name), exist_ok=True)
-            os.makedirs(os.path.join(self._path, 'display-games', self._random_player.name, player_name), exist_ok=True)
-            os.makedirs(os.path.join(self._path, 'display-games', player_name, self._random_player.name), exist_ok=True)
-            os.makedirs(os.path.join(self._path, 'display-games', self._still_player.name, player_name), exist_ok=True)
-            os.makedirs(os.path.join(self._path, 'display-games', player_name, self._still_player.name), exist_ok=True)
+            os.makedirs(os.path.join(self._path, 'display-games', player_name), exist_ok=True)
 
     def admin_of_completed_tasks(self):
 
@@ -105,10 +101,12 @@ class Experiment:
                     arena, temperature = pickle.load(open(player.state_path, "rb", -1))
                     player.reload(arena)
                     player.temperature = temperature
-                    moderator = Moderator(self._config, [player, player], display_games_path = os.path.join(self._path, 'display-games'))
+                    players = [player]*self._config.number_of_players
+                    moderator = Moderator(self._config, players, display_games_path = os.path.join(self._path, 'display-games'))
                     arena.moderator = moderator
                 else:
-                    moderator = Moderator(self._config, [player, player], display_games_path = os.path.join(self._path, 'display-games'))
+                    players = [player] * self._config.number_of_players
+                    moderator = Moderator(self._config, players, display_games_path = os.path.join(self._path, 'display-games'))
                     arena = Arena(self._config, moderator)
                     player.arena = arena
 

@@ -30,14 +30,6 @@ def still_player():
     return player
 
 @pytest.fixture
-def curious_player():
-    config = Config()
-    config.curiosity = True
-    player = Player(config=config, path='tests', name='test-player-curious')
-    player.arena = Arena(config=config)
-    return player
-
-@pytest.fixture
 def custom_player():
     config = Config()
     player = Player(config=config, path='', name='test-player',
@@ -61,13 +53,11 @@ def set_seed():
 def test_player_config():
     config = Config()
     player1 = Player(config=config, path='tests', name='test-player1')
-    config.curiosity = True
     player2 = Player(config=config, path='tests', name='test-player2',
                      learning_rate=0.001,
                      game_play_mode='sequential',
                      batch_size=1000)
     assert player1.config.learning_rate != player2.config.learning_rate
-    assert player1.config.curiosity != player2.config.curiosity
     assert player1.config.batch_size != player2.config.batch_size
     assert player1.config.game_play_mode != player2.config.game_play_mode
 
@@ -316,7 +306,6 @@ def test_add_logs_to_tensorboard(player):
     player._arena._episode_count = 10
     player._arena._episode_times = [1, 3, 2]
     player._model._losses = [0.3, 0.1, 0, 1]
-    player._config._curiosity = False
 
     q_s_a = np.array([[0.1, 0.2, 0.3, 0.4, 0.5]])
     q_crucial_action = np.array([[0.2, 0.3, 0.4, 0.5, 0.6]])
@@ -348,17 +337,11 @@ def test_add_qs_to_tensorboard(player):
     part3 = [{'name': 'Q/overall', 'value': np.float64(0.3), 'step': 10}]
     assert player._summary_writer_collection == part1 + part2 + part3
 
-def test_add_losses_to_tensorboard(player, curious_player):
+def test_add_losses_to_tensorboard(player):
     player._arena._episode_count = 10
     player._model._losses = [0.3, 0.1, 0, 1]
     player.add_losses_to_tensorboard()
     assert player._summary_writer_collection == [{'name': 'learning/losses', 'value': 1, 'step': 10}]
-
-    curious_player._arena._episode_count = 10
-    curious_player._model._losses = [0.3, 0.1, 0, 1]
-    curious_player._model_next_state._losses_next_state = [0.3, 0.1, 0, 1, 8]
-    curious_player.add_losses_to_tensorboard()
-    assert curious_player._summary_writer_collection == [{'name': 'learning/losses', 'value': 1, 'step': 10}, {'name': 'learning/losses-next-state', 'value': 8, 'step': 10}]
 
 def test_add_epsilon_to_tensorboard(player):
     player._arena._episode_count = 10

@@ -10,16 +10,16 @@ class Config:
         self._minimum_epsilon=0
         self._number_of_episodes_total=5000000
         self._number_of_episodes_per_round=10000
-        self._bootstrap_value_epsilon=0.000001 # formerly lambda
+        self._bootstrap_value_epsilon=0.00001 # formerly lambda
         self._discount_factor=0.999 # formerly gamma
-        self._preselect_batch=False
         self._game_play_mode='parallel'
         self._redo_batch=True
 
         # Stochastic policy
         self._use_probabilities = True
-        self._temperature = 100
-        self._temperature_alpha = 0.000001
+        self._temperature = 5
+        self._temperature_alpha = 0.0000001
+        self._temperature_beta = 0.05
         self._average_end_probability = 90
         self._temperature_factor = None
 
@@ -35,16 +35,12 @@ class Config:
         self._add_lstm=False
         self._sequence_length_lstm=1
 
-        ## Curiosity bonus
-        self._curiosity=False
-        self._curiosity_beta=0
-
         # Memory variables
-        self._batch_size=10000
+        self._batch_size=100000
         self._memory_size=5000
 
         # Game variables
-        self._grid_size=30
+        self._grid_size=25
         self._number_of_players=2
         self._number_of_taggers=1
         self._maximum_steps=150
@@ -128,14 +124,6 @@ class Config:
         self._discount_factor = value
 
     @property
-    def preselect_batch(self):
-        return self._preselect_batch
-
-    @preselect_batch.setter
-    def preselect_batch(self, value):
-        self._preselect_batch = bool(value)
-
-    @property
     def use_probabilities(self):
         return self._use_probabilities
 
@@ -154,6 +142,10 @@ class Config:
     @property
     def temperature_alpha(self):
         return self._temperature_alpha
+
+    @property
+    def temperature_beta(self):
+        return self._temperature_beta
 
     @property
     def temperature_factor(self):
@@ -204,22 +196,6 @@ class Config:
     @sequence_length_lstm.setter
     def sequence_length_lstm(self, value):
         self._sequence_length_lstm = int(value)
-
-    @property
-    def curiosity(self):
-        return self._curiosity
-
-    @curiosity.setter
-    def curiosity(self, value):
-        self._curiosity = bool(value)
-
-    @property
-    def curiosity_beta(self):
-        return self._curiosity_beta
-
-    @curiosity_beta.setter
-    def curiosity_beta(self, value):
-        self._curiosity_beta = value
 
     @property
     def batch_size(self):
